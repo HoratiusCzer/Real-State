@@ -17,8 +17,8 @@ in the Production Development Prompt.
 
 1. ✅ Repository audit + architecture confirmation — **complete 2026-09-16**
 2. ✅ Design system + public website foundation — **complete 2026-09-16**
-3. ⏳ Database + migrations + RLS + RBAC — **next**
-4. ⏸️ Authentication + member organizations
+3. ✅ Database + migrations + RLS + RBAC — **complete 2026-09-16**
+4. ⏳ Authentication + member organizations — **next**
 5. ⏸️ Member portal
 6. ⏸️ Property Exchange
 7. ⏸️ Demand/Requirement system
@@ -91,17 +91,93 @@ session (user chose not to install the Claude-in-Chrome extension). Visual QA (s
 responsive behavior at the 375/768/1024/1440 breakpoints, contrast) is a known gap for the
 next session per spec §59/§23/§24.
 
-## Stage 3 — Database + Migrations + RLS + RBAC
+## Stage 3 — Database + Migrations + RLS + RBAC (✅ complete)
 
-Full schema per spec §2.2–§2.3, §8.3, §9, §10, §11, §12, §13, §15, §19, §21: profiles,
-member_entities, entity_users, invitations, membership_applications, roles, permissions,
-role_permissions; property_listings + listing_media/documents/amenities/contacts/
-visibility_members; demands + demand_property_types/locations/amenities/contacts/
-visibility_members; Nepal location hierarchy tables; land area unit reference table;
-match_rule_sets/match_rules/matches/match_components/match_actions; collaboration_requests/
-collaborations/collaboration_contact_disclosures; notifications; feature_flags; audit_logs;
-CMS content tables. EF Core migrations + SQL Server security policies for RLS on every private
-table, tested with direct query attempts (not just through the API).
+**Project**: new `REAK.Api` (.NET 10 Web API) at the repo root, added to `REAK.slnx`. EF Core
+10 + SQL Server. Connection string points at `real-estate` on `(localdb)\MSSQLLocalDB`.
+
+**Schema**: 57 entities across `Models/Entities/{Identity,Reference,Listings,Demands,Matching,
+Collaboration,Notifications,FeatureFlags,Audit,Cms}/`, covering every table group in spec
+§2.2–§2.3, §8.3, §9, §10, §11, §12, §13, §15, §19, §21 — member orgs/roles/permissions/
+invitations, the full listing/demand mirrored structure with isolated contact tables, the
+matching engine (rule sets/rules/matches/components/actions, no hardcoded weights — `Weight`
+defaults to 0 until an admin sets it), the collaboration workspace + 8 child tables +
+disclosure grants, notifications, feature flags, append-only audit log, and CMS content types.
+All primary keys are `Guid` per §21. Applied via two migrations:
+`InitialCreate` (schema) and `AddRowLevelSecurity` (see below) — both in
+`REAK.Api/Data/Migrations/`.
+
+**RLS**: implemented as native SQL Server row-level security (`CREATE SECURITY POLICY` +
+`SCHEMABINDING` inline table-valued predicate functions in a `Security` schema), not just
+application-level filtering — see `docs/REAK-requirements.md` §2.5's stack note for why this
+satisfies the spec's Postgres-flavored RLS language on this stack. Source:
+`REAK.Api/Data/Security/RowLevelSecurity.sql` (+ `.Down.sql`), embedded into the
+`AddRowLevelSecurity` migration. Covers: `PropertyListings` and `Demands` (tenant + network +
+public-projection visibility, spec §16 — the public branch is flag/approval/expiry gated and
+doesn't depend on session context, so it also covers genuinely anonymous connections),
+`ListingContacts`/`DemandContacts` (owning-org read, or an explicit unrevoked
+`CollaborationContactDisclosure` scoped to the specific listing/demand via the collaboration's
+originating match — never a blanket org-to-org grant), `CollaborationWorkspaces` + its 8 child
+tables (participants only), and an `INSTEAD OF UPDATE, DELETE` trigger making `AuditLogs`
+genuinely append-only. **Read and write are separate predicates** for listings/demands/
+contacts — broader network/public read visibility never doubles as write authorization; a
+first draft of this got that wrong (missing `BEFORE DELETE` block predicates meant anyone with
+read access could delete a row they didn't own) — caught before shipping by writing an actual
+adversarial test, not just eyeballing the SQL. See `REAK.Api/Data/Security/rls_test.sql` — a
+self-cleaning script that seeds two orgs/users and empirically proves: owner access, outsider
+denial, hostile UPDATE/DELETE blocked, read-without-write after a visibility grant, anonymous
+denial then correct anonymous access once a listing is genuinely public, and the audit-log
+trigger. Re-run it after any RLS-relevant schema change.
+
+**RBAC**: seeded 4 roles (SuperAdmin/AssociationAdmin — system-level; MemberAdmin/MemberStaff —
+org-level) and the 17 permissions from spec §7, with a documented default grant matrix (full
+grant for both admin roles; a reasonable subset for Member roles) — not spec-mandated at this
+granularity, adjustable later via the Admin Portal (Stage 11).
+
+**Seeded reference data** — deliberately limited to what the spec itself enumerates, nothing
+invented: the 9 land area units (§11, conversion coefficients left `null` — disabled until an
+admin configures them), the 4 demand purposes (§9: buyer/tenant/investor/other), Nepal's 7
+provinces (an administrative fact, not a REAK business fact), and NPR as a currency. Feature
+flags: all 13 from §15 seeded `false` (conservative default). **Not seeded**: property types,
+subtypes, amenities, districts, municipalities, wards, localities (spec marks these
+admin-configurable without giving an exhaustive list — tables exist, ready for real admin
+input or a verified data import later) — and no SuperAdmin user account (needs a real
+password set through a proper flow; that's Stage 4, not a hardcoded seeded credential).
+
+**Recheck against spec (2026-09-16, before pushing)**: went back through
+`docs/REAK-requirements.md` §21 (Database Quality Standards) line by line against what was
+actually built. Found two real gaps:
+- No CHECK constraints anywhere (only app-level `[Range]` annotations, which don't reach the
+  database). Added a third migration, `AddDatabaseQualityCheckConstraints`, with 15 constraints
+  on the fields that have a genuine invariant (price/area/bedroom counts ≥ 0, demand
+  min/max budget and area ranges internally consistent, match rule weight ≥ 0, match score ≥
+  0). Verified with a direct negative-price insert attempt — correctly rejected by the DB.
+- `ReferenceCode` columns exist on `PropertyListings`/`Demands` but nothing generates them yet
+  (spec: "generated server-side/database-side, never client-side"). Deliberately **not**
+  fixed in this stage — no service exists yet that creates listings/demands (that's Stage 6/7),
+  so there's no live risk of client-side generation today. Flagged so Stage 6/7 build the
+  generator (e.g. a SQL Server `SEQUENCE` + computed default) instead of accepting a
+  client-supplied value.
+
+Reran the full `rls_test.sql` suite after adding the check-constraints migration — all 7
+scenarios still pass, no regression.
+
+**Verified**: `dotnet build` clean (0 errors) after every change; all three migrations applied
+cleanly to a real `real-estate` database; `rls_test.sql` passes all 7 scenarios (twice — before
+and after the check-constraints migration); a negative-price insert is rejected by the new
+constraint; seeded data spot-checked via direct SQL queries.
+
+**Known gaps for later stages**: `ListingDocument`/`ListingMedia`, `Profile`, and
+`MemberEntity` don't have RLS policies yet (documented, not forgotten) — general PII
+protection on `Profile` and the public/private split on listing media is a reasonable Stage 13
+(Security hardening) follow-up. The disclosure predicate only resolves a listing/demand when
+the collaboration originated from a match (`CollaborationRequest.MatchId` set) — a
+non-match-originated collaboration currently has no way to scope a contact disclosure to a
+specific record; would need an explicit target on the disclosure or workspace itself. The
+session context (`app.profile_id`, `app.is_system_admin`) that the predicates depend on isn't
+wired into the ASP.NET request pipeline yet — that requires the JWT auth middleware, which is
+Stage 4's job; until then, every predicate fails closed (no session context = no access),
+which is the correct default, not a bypass.
 
 ## Stages 4–16
 

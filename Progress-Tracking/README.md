@@ -6,10 +6,11 @@
 
 ## Quick Status
 
-**Current stage**: Stages 1–2 complete (repo audit; design system + public website
-foundation, Next.js at `web/`). Stage 3 (database + migrations + RLS + RBAC) next.
+**Current stage**: Stages 1–3 complete (repo audit; design system + public website foundation
+at `web/`; full 57-entity database schema + SQL Server RLS + RBAC at `REAK.Api/`, DB name
+`real-estate`). Stage 4 (authentication + member organizations) next.
 
-**Overall progress**: 2 of 16 stages complete.
+**Overall progress**: 3 of 16 stages complete.
 
 ## How to use this tracking system
 
