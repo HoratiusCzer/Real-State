@@ -19,8 +19,8 @@ in the Production Development Prompt.
 2. ✅ Design system + public website foundation — **complete 2026-09-16**
 3. ✅ Database + migrations + RLS + RBAC — **complete 2026-09-16**
 4. ✅ Authentication + member organizations — **complete 2026-09-16**
-5. ⏳ Member portal — **next**
-6. ⏸️ Property Exchange
+5. ✅ Member portal — **complete 2026-09-16**
+6. ⏳ Property Exchange — **next**
 7. ⏸️ Demand/Requirement system
 8. ⏸️ Matching engine
 9. ⏸️ Collaboration
@@ -253,7 +253,62 @@ until Stage 5 builds real session persistence. No SMTP/email provider wired up (
 CORS configuration — unneeded so far since the browser never calls REAK.Api directly, only the
 Next.js server does; revisit if Stage 5 adds direct client-side calls.
 
-## Stages 5–16
+## Stage 5 — Member Portal (✅ complete)
+
+**Scope decision**: spec §4.2 lists 20 portal routes, but 12 of them (properties, demands,
+matches, collaborations, saved) depend on Stages 6-9, which don't exist yet. Built the portal
+shell plus every route that's genuinely buildable now (identity/org/notification-related);
+everything else got a real route that renders an honest "not built yet — Stage N" state rather
+than being hidden, faked, or built ahead of its owning stage's data model.
+
+**Real, working now**:
+- `REAK.Api/Services/Security/RequirePermissionAttribute`-gated API endpoints:
+  `DashboardController` (org-scoped real counts — legitimately all zero today since nothing can
+  create a listing/demand/match/collaboration yet, explicitly scoped to the caller's own
+  `MemberEntityId`s rather than relying on RLS's broader network-visible read set, which would
+  overcount for "my dashboard"), `MemberEntitiesController` (directory list/detail, plus
+  self-service org editing with an explicit ownership check — a MemberAdmin can edit only the
+  org(s) they administer, verified live by having one org's admin get a 403 on another org's
+  update), `NotificationsController` (own-notifications only, no RLS on this table yet so every
+  query/mutation is explicitly scoped to the caller's ProfileId in code), and
+  `ProfilesController.UpdateMe` (self-service name/phone edit).
+- Also fixed a real RBAC gap while building this: `MemberAdmin` had `members.read` but never
+  `members.update`, so no org admin could have edited their own org's profile — added to
+  `DatabaseSeeder`'s grant matrix.
+- Frontend (`web/src/app/portal/`): a protected layout (`requireSession()` redirects to `/login`
+  if there's no valid session) with a sidebar covering all 12 spec routes, `/portal/dashboard`
+  (stat tiles built per the dataviz skill's figures contract — real zeros render as an ordinary
+  number, the one stat with no backing feature at all (Saved Properties) renders as a visually
+  distinct muted em dash with a "coming with Stage 6" caption, never the same look as a real
+  zero), `/portal/members` + `/portal/members/:id` (directory), `/portal/notifications`
+  (list + mark-read/mark-all-read), `/portal/profile` (edit), `/portal/organization`
+  (view, or edit if the caller holds `members.update`), `/portal/settings` (password change,
+  reusing Stage 4's endpoint).
+
+**Verified end-to-end** (not just unit-level): created two member organizations via Flow A,
+confirmed each org's dashboard/member-list/notifications are correctly scoped and isolated from
+the other, confirmed a MemberAdmin can edit their own org but gets a 403 editing another org's
+(the one piece of real authorization logic this stage added, since MemberEntity has no RLS yet),
+confirmed the Next.js pages render real data fetched live from the API (not mocked) by setting
+session cookies directly and requesting each portal route, confirmed unauthenticated requests to
+any `/portal/*` route redirect to `/login`. All test data cleaned from the local dev database
+afterward.
+
+**Deferred to their owning stage** (spec-listed routes, built as honest placeholders, not fake
+data or hidden nav items): `/portal/properties(+new/:id/:id/edit)`, `/portal/my-properties`,
+`/portal/saved` → Stage 6; `/portal/demands(+new/:id/:id/edit)` → Stage 7; `/portal/matches(+:id)`
+→ Stage 8; `/portal/collaborations(+:id)` → Stage 9.
+
+**Known gaps for later stages**: same as Stage 4's — no RLS yet on `MemberEntities`/
+`Notifications`/`Profiles` (Stage 13), so `MemberEntitiesController.Update`'s ownership check and
+`NotificationsController`'s profile-scoping are real security logic living in application code,
+not backstopped by the database the way listings/demands are — worth double-checking again once
+Stage 13 lands RLS everywhere. No browser tooling connected this session (same Stage 2/4 gap) —
+verified via HTTP requests with cookies set directly rather than an actual browser session, so
+visual QA and the Server Action submit flow itself (as opposed to the API calls underneath it)
+are unverified by an actual browser.
+
+## Stages 6–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -264,4 +319,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-16
-**Status**: Stages 1-4 complete. Stage 5 (Member Portal) next.
+**Status**: Stages 1-5 complete. Stage 6 (Property Exchange) next.

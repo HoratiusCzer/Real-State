@@ -1,0 +1,84 @@
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using REAK.Api.Data;
+using REAK.Api.Models.Dto;
+using REAK.Api.Models.Enums;
+
+namespace REAK.Api.Controllers;
+
+/// <summary>Spec §4.2's Member Portal dashboard — "database-backed, no fake numbers". Every count
+/// here is a real query scoped to the caller's own organization(s); it is legitimately all zeros
+/// today because nothing can create a listing/demand/match/collaboration yet (Stages 6-9). Scoped
+/// explicitly to the caller's own MemberEntityIds rather than relying on PropertyListings/Demands'
+/// RLS filter alone — RLS's read predicate also allows network-shared listings from OTHER
+/// organizations, which is a broader set than "my dashboard" should mean.</summary>
+[ApiController]
+[Route("api/dashboard")]
+[Authorize]
+public class DashboardController(ReakDbContext db) : ControllerBase
+{
+    [HttpGet("summary")]
+    public async Task<ActionResult<DashboardSummary>> Summary(CancellationToken ct)
+    {
+        var profileId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        var myEntityIds = await db.EntityUsers
+            .Where(eu => eu.ProfileId == profileId && eu.IsActive)
+            .Select(eu => eu.MemberEntityId)
+            .ToListAsync(ct);
+
+        if (myEntityIds.Count == 0)
+        {
+            return Ok(new DashboardSummary(0, 0, 0, 0, 0, null, 0, []));
+        }
+
+        var now = DateTime.UtcNow;
+        var expiryHorizon = now.AddDays(7);
+
+        var activeListings = db.PropertyListings.Where(l =>
+            myEntityIds.Contains(l.MemberEntityId) && !l.IsDeleted && l.Status == ListingStatus.Approved &&
+            (l.ExpiresAt == null || l.ExpiresAt > now));
+
+        var draftListings = db.PropertyListings.Where(l =>
+            myEntityIds.Contains(l.MemberEntityId) && !l.IsDeleted && l.Status == ListingStatus.Draft);
+
+        var activeDemands = db.Demands.Where(d =>
+            myEntityIds.Contains(d.MemberEntityId) && !d.IsDeleted && d.Status == DemandStatus.Active);
+
+        var potentialMatches = db.Matches.Where(m =>
+            m.Status == MatchStatus.New &&
+            (myEntityIds.Contains(m.Listing.MemberEntityId) || myEntityIds.Contains(m.Demand.MemberEntityId)));
+
+        var pendingCollaborationRequests = db.CollaborationRequests.Where(r =>
+            myEntityIds.Contains(r.ToMemberEntityId) && r.Status == CollaborationRequestStatus.Pending);
+
+        var expiringListings = db.PropertyListings.Where(l =>
+            myEntityIds.Contains(l.MemberEntityId) && !l.IsDeleted &&
+            l.ExpiresAt != null && l.ExpiresAt > now && l.ExpiresAt <= expiryHorizon);
+
+        var expiringDemands = db.Demands.Where(d =>
+            myEntityIds.Contains(d.MemberEntityId) && !d.IsDeleted &&
+            d.ExpiresAt != null && d.ExpiresAt > now && d.ExpiresAt <= expiryHorizon);
+
+        var recentProperties = await db.PropertyListings
+            .Where(l => myEntityIds.Contains(l.MemberEntityId) && !l.IsDeleted)
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(5)
+            .Select(l => new RecentPropertyDto(l.Id, l.ReferenceCode, l.Title, l.Status.ToString(), l.CreatedAt))
+            .ToListAsync(ct);
+
+        var summary = new DashboardSummary(
+            ActivePropertiesCount: await activeListings.CountAsync(ct),
+            DraftPropertiesCount: await draftListings.CountAsync(ct),
+            ActiveRequirementsCount: await activeDemands.CountAsync(ct),
+            PotentialMatchesCount: await potentialMatches.CountAsync(ct),
+            PendingCollaborationRequestsCount: await pendingCollaborationRequests.CountAsync(ct),
+            SavedPropertiesCount: null,
+            ExpiringItemsCount: await expiringListings.CountAsync(ct) + await expiringDemands.CountAsync(ct),
+            RecentProperties: recentProperties);
+
+        return Ok(summary);
+    }
+}

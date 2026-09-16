@@ -1,4 +1,6 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { authApi, type MeResponse, type TokenPair } from "./api";
 
 const ACCESS_COOKIE = "reak_access";
@@ -55,3 +57,23 @@ export async function getCurrentUser(): Promise<MeResponse | null> {
   const result = await authApi.me(accessToken);
   return result.ok ? result.data : null;
 }
+
+export async function getAccessToken(): Promise<string | undefined> {
+  const store = await cookies();
+  return store.get(ACCESS_COOKIE)?.value;
+}
+
+/** For portal pages: redirects to /login if there's no valid session, otherwise returns both
+ * the user and the raw access token so the page can call authenticated REAK.Api endpoints
+ * directly (dedupes the two cookie/`/me` reads a page and its layout would otherwise each do,
+ * via React's per-request `cache()`). */
+export const requireSession = cache(async (): Promise<{ user: MeResponse; accessToken: string }> => {
+  const accessToken = await getAccessToken();
+  const user = accessToken ? await authApi.me(accessToken) : null;
+
+  if (!accessToken || !user?.ok) {
+    redirect("/login");
+  }
+
+  return { user: user.data, accessToken };
+});

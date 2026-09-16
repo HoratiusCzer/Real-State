@@ -122,7 +122,7 @@ public static class DatabaseSeeder
         ["AssociationAdmin"] = PermissionSlugs,
         ["MemberAdmin"] = new[]
         {
-            "members.read",
+            "members.read", "members.update",
             "listings.read", "listings.create", "listings.update",
             "demands.read", "demands.create",
             "matches.read",
