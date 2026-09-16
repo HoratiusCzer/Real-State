@@ -8,7 +8,17 @@
 
 **Project:** REAK
 **Generated:** 2026-09-16 16:49:52
-**Category:** Real Estate/Property
+**Curated override:** 2026-09-16 — the auto-matched "Real Estate/Property" category (teal
+marketplace colors + Cinzel luxury serif + Exaggerated Minimalism style) directly contradicts
+this project's own brief: `docs/REAK-requirements.md` §5 explicitly says *avoid fake luxury
+imagery, avoid generic AI-SaaS aesthetics*, and asks for *authoritative, professional,
+premium, modern, trustworthy, clean, Nepal-relevant, association-focused* — i.e. an
+institutional/government-adjacent association, not a boutique property marketplace. Replaced
+below with the "Government/Public Service" color match and "Corporate Trust" typography match
+from targeted `--domain color` / `--domain typography` searches, which fit that brief
+directly. Treat the values below as authoritative for REAK, not the auto-generated ones above
+this note.
+**Category:** Government/Public Service × Corporate Trust (curated, not auto-matched)
 **Design Dials:** Variance 3/10 (Centered / Minimal) | Density 6/10 (Standard)
 
 ---
@@ -19,29 +29,37 @@
 
 | Role | Hex | CSS Variable |
 |------|-----|--------------|
-| Primary | `#0F766E` | `--color-primary` |
+| Primary | `#0F172A` | `--color-primary` |
 | On Primary | `#FFFFFF` | `--color-on-primary` |
-| Secondary | `#14B8A6` | `--color-secondary` |
+| Secondary | `#334155` | `--color-secondary` |
 | Accent/CTA | `#0369A1` | `--color-accent` |
-| Background | `#F0FDFA` | `--color-background` |
-| Foreground | `#134E4A` | `--color-foreground` |
-| Muted | `#E8F0F3` | `--color-muted` |
-| Border | `#99F6E4` | `--color-border` |
+| Background | `#F8FAFC` | `--color-background` |
+| Foreground | `#020617` | `--color-foreground` |
+| Muted | `#E8ECF1` | `--color-muted` |
+| Border | `#E2E8F0` | `--color-border` |
 | Destructive | `#DC2626` | `--color-destructive` |
-| Ring | `#0F766E` | `--color-ring` |
+| Ring | `#0F172A` | `--color-ring` |
 
-**Color Notes:** Trust teal + professional blue
+**Color Notes:** High-contrast navy + professional blue accent ("Government/Public Service"
+match). Deliberately restrained — no teal/marketplace vibrancy, no gradients. This is a
+placeholder professional palette, not REAK's official brand color; swap it once REAK supplies
+real brand colors (spec §36 lists "official colors" as something REAK itself must provide).
 
 ### Typography
 
-- **Heading Font:** Cinzel
-- **Body Font:** Josefin Sans
-- **Mood:** real estate, luxury, elegant, sophisticated, property, premium
-- **Google Fonts:** [Cinzel + Josefin Sans](https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Josefin+Sans:wght@300;400;500;600;700&display=swap)
+- **Heading Font:** Lexend
+- **Body Font:** Source Sans 3
+- **Mood:** corporate, trustworthy, accessible, readable, professional, clean
+- **Why**: "Corporate Trust" pairing, matched against "government, healthcare, finance,
+  accessibility-focused" — fits an association/institutional platform far better than the
+  auto-matched luxury-real-estate serif pairing. Lexend is specifically designed to reduce
+  visual stress and improve reading performance, which also supports the WCAG 2.2 AA target
+  in `docs/REAK-requirements.md` §24.
+- **Google Fonts:** [Lexend + Source Sans 3](https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap)
 
 **CSS Import:**
 ```css
-@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Josefin+Sans:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lexend:wght@300;400;500;600;700&family=Source+Sans+3:wght@300;400;500;600;700&display=swap');
 ```
 
 ### Spacing Variables
@@ -93,8 +111,8 @@
 /* Secondary Button */
 .btn-secondary {
   background: transparent;
-  color: #0F766E;
-  border: 2px solid #0F766E;
+  color: #0F172A;
+  border: 1.5px solid #0F172A;
   padding: 12px 24px;
   border-radius: 8px;
   font-weight: 600;
@@ -107,17 +125,16 @@
 
 ```css
 .card {
-  background: #F0FDFA;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 10px;
   padding: 24px;
-  box-shadow: var(--shadow-md);
+  box-shadow: var(--shadow-sm);
   transition: all 200ms ease;
-  cursor: pointer;
 }
 
 .card:hover {
-  box-shadow: var(--shadow-lg);
-  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
 }
 ```
 
@@ -129,13 +146,14 @@
   border: 1px solid #E2E8F0;
   border-radius: 8px;
   font-size: 16px;
+  background: #FFFFFF;
   transition: border-color 200ms ease;
 }
 
 .input:focus {
-  border-color: #0F766E;
+  border-color: #0369A1;
   outline: none;
-  box-shadow: 0 0 0 3px #0F766E20;
+  box-shadow: 0 0 0 3px #0369A120;
 }
 ```
 
@@ -161,21 +179,30 @@
 
 ## Style Guidelines
 
-**Style:** Exaggerated Minimalism
+**Style:** Minimalism & Swiss Style *(curated — replaces auto-matched "Exaggerated
+Minimalism", which is for fashion/editorial/luxury brands, not an association platform)*
 
-**Keywords:** Bold minimalism, oversized typography, high contrast, negative space, loud minimal, statement design
+**Keywords:** Clean, simple, spacious, functional, white space, high contrast, geometric,
+sans-serif, grid-based, essential
 
-**Best For:** Fashion, architecture, portfolios, agency landing pages, luxury brands, editorial
+**Best For:** Enterprise apps, dashboards, documentation sites, SaaS platforms, professional
+tools — matches REAK's Member Portal and Admin Portal directly; apply the same restraint to
+the public site rather than a marketing-site "loud minimal" treatment.
 
-**Key Effects:** font-size: clamp(3rem 10vw 12rem), font-weight: 900, letter-spacing: -0.05em, massive whitespace
+**Key Effects:** Subtle hover (200–250ms), smooth transitions, sharp/minimal shadows
+(`--shadow-sm`/`--shadow-md` only — avoid the `--shadow-xl` hero treatment for routine UI),
+clear type hierarchy, fast loading. No oversized display type, no massive negative-space
+hero statements — this is an institutional association site, not an agency portfolio.
 
 ### Page Pattern
 
-**Pattern Name:** Real-Time / Operations Landing
-
-- **Conversion Strategy:** For ops/security/iot products. Demo or sandbox link. Trust signals.
-- **CTA Placement:** Primary CTA in nav + After metrics
-- **Section Order:** 1. Hero (product + live preview or status), 2. Key metrics/indicators, 3. How it works, 4. CTA (Start trial / Contact)
+REAK's homepage sections are specified directly in `docs/REAK-requirements.md` §4.1 (Header,
+Hero, REAK introduction, Mission/Vision, Association benefits, Property Exchange explanation,
+How the network works, Verified members, News, Notices, Events, Membership CTA, Public
+property section behind a feature flag, Contact CTA, Footer) — use that order, not a
+generic auto-matched pattern. The closest generic pattern for reference is **Marketplace /
+Directory** (search-focused hero, categories, featured listings, trust signals, CTA) for the
+member/public property-exchange pages specifically (Stage 6+), not the homepage.
 
 ---
 

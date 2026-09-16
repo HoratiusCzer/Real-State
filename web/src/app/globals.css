@@ -1,26 +1,130 @@
 @import "tailwindcss";
 
+/*
+ * REAK design tokens — see /design-system/reak/MASTER.md for rationale.
+ * Curated institutional palette (navy + blue accent) and Corporate Trust
+ * typography (Lexend / Source Sans 3), not the auto-matched "luxury real
+ * estate" defaults — this is an association platform, not a marketplace.
+ * Swap these once REAK supplies its real official brand colors (spec §36).
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+  --color-primary: #0f172a;
+  --color-on-primary: #ffffff;
+  --color-secondary: #334155;
+  --color-on-secondary: #ffffff;
+  --color-accent: #0369a1;
+  --color-on-accent: #ffffff;
+  --color-background: #f8fafc;
+  --color-foreground: #020617;
+  --color-card: #ffffff;
+  --color-card-foreground: #020617;
+  --color-muted: #e8ecf1;
+  --color-muted-foreground: #64748b;
+  --color-border: #e2e8f0;
+  --color-destructive: #dc2626;
+  --color-on-destructive: #ffffff;
+  --color-success: #15803d;
+  --color-ring: #0f172a;
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4rem;
+
+  --shadow-sm: 0 1px 2px rgba(2, 6, 23, 0.05);
+  --shadow-md: 0 4px 6px rgba(2, 6, 23, 0.08);
+  --shadow-lg: 0 10px 15px rgba(2, 6, 23, 0.1);
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-theme="light"]) {
+    --color-primary: #e2e8f0;
+    --color-on-primary: #0f172a;
+    --color-secondary: #94a3b8;
+    --color-on-secondary: #0f172a;
+    --color-accent: #38bdf8;
+    --color-on-accent: #0f172a;
+    --color-background: #0b1120;
+    --color-foreground: #f1f5f9;
+    --color-card: #0f172a;
+    --color-card-foreground: #f1f5f9;
+    --color-muted: #1e293b;
+    --color-muted-foreground: #94a3b8;
+    --color-border: #1e293b;
+    --color-destructive: #f87171;
+    --color-on-destructive: #0b1120;
+    --color-success: #4ade80;
+    --color-ring: #e2e8f0;
   }
 }
 
+:root[data-theme="dark"] {
+  --color-primary: #e2e8f0;
+  --color-on-primary: #0f172a;
+  --color-secondary: #94a3b8;
+  --color-on-secondary: #0f172a;
+  --color-accent: #38bdf8;
+  --color-on-accent: #0f172a;
+  --color-background: #0b1120;
+  --color-foreground: #f1f5f9;
+  --color-card: #0f172a;
+  --color-card-foreground: #f1f5f9;
+  --color-muted: #1e293b;
+  --color-muted-foreground: #94a3b8;
+  --color-border: #1e293b;
+  --color-destructive: #f87171;
+  --color-on-destructive: #0b1120;
+  --color-success: #4ade80;
+  --color-ring: #e2e8f0;
+}
+
+@theme inline {
+  --color-primary: var(--color-primary);
+  --color-on-primary: var(--color-on-primary);
+  --color-secondary: var(--color-secondary);
+  --color-on-secondary: var(--color-on-secondary);
+  --color-accent: var(--color-accent);
+  --color-on-accent: var(--color-on-accent);
+  --color-background: var(--color-background);
+  --color-foreground: var(--color-foreground);
+  --color-card: var(--color-card);
+  --color-card-foreground: var(--color-card-foreground);
+  --color-muted: var(--color-muted);
+  --color-muted-foreground: var(--color-muted-foreground);
+  --color-border: var(--color-border);
+  --color-destructive: var(--color-destructive);
+  --color-on-destructive: var(--color-on-destructive);
+  --color-success: var(--color-success);
+  --color-ring: var(--color-ring);
+
+  --font-sans: var(--font-body);
+  --font-heading: var(--font-heading);
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-background);
+  color: var(--color-foreground);
+}
+
+* {
+  border-color: var(--color-border);
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-ring);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

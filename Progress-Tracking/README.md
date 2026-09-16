@@ -6,10 +6,10 @@
 
 ## Quick Status
 
-**Current stage**: Stage 1 complete (repo audit); Stage 2 (design system + public website
-foundation) not yet started — blocked on a frontend framework decision.
+**Current stage**: Stages 1–2 complete (repo audit; design system + public website
+foundation, Next.js at `web/`). Stage 3 (database + migrations + RLS + RBAC) next.
 
-**Overall progress**: 1 of 16 stages complete.
+**Overall progress**: 2 of 16 stages complete.
 
 ## How to use this tracking system
 
