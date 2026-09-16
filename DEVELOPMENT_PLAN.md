@@ -21,8 +21,8 @@ in the Production Development Prompt.
 4. ✅ Authentication + member organizations — **complete 2026-09-16**
 5. ✅ Member portal — **complete 2026-09-16**
 6. ✅ Property Exchange — **complete 2026-09-16**
-7. ⏳ Demand/Requirement system — **next**
-8. ⏸️ Matching engine
+7. ✅ Demand/Requirement system — **complete 2026-09-16**
+8. ⏳ Matching engine — **next**
 9. ⏸️ Collaboration
 10. ⏸️ Notifications
 11. ⏸️ Admin + CMS
@@ -389,7 +389,90 @@ decision holds — admins add real data via `ReferenceDataController`, nothing f
 either, and this session's test fixtures for it were left in the dev DB as legitimate
 config data, not business data).
 
-## Stages 7–16
+## Stage 7 — Demand/Requirement System (✅ complete)
+
+Deliberately mirrors Stage 6's architecture (spec §2.3: listings and demands are two sides of
+one relationship, and Stage 3 already built the schema identically-shaped) — same RLS-reliance
+pattern in `DemandService` (`SaveGuardedAsync` catches the RLS block-predicate `SqlException`
+and returns 403, exactly like `ListingService`), same contact-isolation model
+(`DemandContact`/`ClientName`/`ConfidentialNotes` never returned by normal queries), same
+`ReferenceCode` generator (already built generically in Stage 6 — `NextDemandCodeAsync` just
+needed calling). Two real differences, both spec-driven:
+
+- **No moderation.** `DemandStatus` has no PendingReview/Rejected (unlike `ListingStatus`), and
+  spec §15's feature-flag list has no demand equivalent of `property_moderation_required`.
+  Lifecycle is just Draft → publish → Active → fulfill/archive, no admin approval step, no
+  `demands.moderate` permission.
+- **Property type and location are proper many-to-many join tables**, not single required FKs —
+  spec §9 explicitly: "a member can register a client's requirement... do not model
+  relationships as arrays — use proper join tables." A demand can accept several property types
+  and several acceptable locations at whatever hierarchy depth the client cares about (province
+  only, or all the way to a specific locality). `DemandService` exposes replace-set endpoints
+  for both, mirroring how listing amenities already worked.
+
+**RBAC gap found and closed**: spec §7's permission list only gives `demands.read`/
+`demands.create` as examples — no `demands.update` existed, meaning nobody could ever edit or
+withdraw a requirement they'd created. Added `demands.update` to the seeded permission list and
+granted it to MemberAdmin only (mirroring the existing `listings.update` asymmetry — MemberStaff
+gets create but not update for either), consistent with the `members.update` gap found and fixed
+the same way in Stage 5.
+
+**No public projection** — spec §9.1 scopes demand search/visibility to members only (contrast
+with listings' spec §16 public branch); there's no `PublicDemandsController` and none was
+needed.
+
+Because a `Demand` row's only required-by-schema fields are `Title`+`PurposeId` (everything
+else — budget, area, bedrooms, property types, locations — is optional/nullable, unlike a
+listing's much larger required set), the wizard's create point moves much earlier: the row is
+created right after step 1 (Basic Information), and every later step (Property Types, Location,
+Budget & Area, Amenities, Description, Client Contact, Visibility, Expiry) persists against the
+real row from there.
+
+**Verified end-to-end**, API-first then through the actual Next.js pages with session cookies
+set: full lifecycle (Draft → publish → fulfill / archive → soft-delete); cross-org RLS isolation
+(owner reads/writes fine, a different org gets 404 before any visibility grant, gets read access
+but a 403 on write after a network-share, exactly like Stage 6's listing tests); client contact
+(`ClientName`/`Phone`/`Email`/`ConfidentialNotes`) never leaking to a non-owner even with
+network read access; property-type/location/amenity replace-set endpoints; the Stage 5
+dashboard's "Active requirements" stat now showing real, non-zero data. `dotnet build` and
+`npm run build`/`lint` clean. `rls_test.sql`'s 7 scenarios rerun — still pass, no regression
+(no new migration was needed at all this stage — the schema already existed from Stage 3; only
+new application code and one permission-seed addition).
+
+**Known gaps for later stages**: the wizard and edit page both collect only a single acceptable
+location per requirement in the UI (the API supports multiple via the replace-set endpoint,
+just not exposed as an add-multiple picker — same kind of scope cut as Stage 6's
+`SelectedMembers` visibility picker, and for the same reason: time, not a technical limit);
+`DemandContact` RLS is real and tested, but `Demand`'s own moderation-free lifecycle means there
+is deliberately no equivalent of Stage 6's approve/reject flow to test — that's correct per
+spec, not an omission.
+
+**Recheck against spec before pushing (2026-09-16)**: went back through §9/§9.1 line by line
+against what was actually built, then went further and adversarially tested something Stage 6
+never specifically verified either. Two things came out of it:
+
+- **Verified, not just reasoned about**: `ReplacePropertyTypesAsync`/`ReplaceLocationsAsync`/
+  `ReplaceAmenitiesAsync`/`UpdateVisibilityAsync` only touch child join tables
+  (`DemandPropertyTypes`/`DemandLocations`/`DemandAmenities`/`DemandVisibilityMembers`) that have
+  no RLS policy of their own — they're protected only because each method also sets
+  `demand.UpdatedByProfileId`/`UpdatedAt` on the parent row before saving, which forces an UPDATE
+  against `dbo.Demands` into the same transaction and lets that table's real RLS block predicate
+  reject the whole thing. That's a subtle invariant (an easy line to accidentally drop in a future
+  edit), so instead of trusting the code-reading, ran a live adversarial test: created a demand,
+  network-shared it, then had a different org's session — which could now *read* it — attempt all
+  four of those endpoints plus the equivalent listing ones
+  (`ReplaceAmenities`/`UpdateVisibility`/`UpdateContact`) from Stage 6. Every one was rejected
+  (403) and a follow-up read confirmed nothing had actually changed. This was genuinely
+  unverified before now, for both stages, not a new bug.
+- **Found and deliberately not fixed**: `AuditLogs` (spec §19 — "listing changes, demand
+  changes, moderation actions...") has the table, its RLS, and its append-only trigger (Stage 3)
+  but nothing in `AuthService`/`ListingService`/`DemandService`/`MemberEntitiesController`/
+  `ProfilesController` ever writes to it. Confirmed this is intentional per the spec's own stage
+  order (§2.6 lists "Feature flags + reports + audit" as Stage 12, well after Matching/
+  Collaboration/Notifications/Admin) rather than something each stage should wire in piecemeal —
+  correctly deferred, now explicitly documented rather than silently absent.
+
+## Stages 8–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -400,4 +483,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-16
-**Status**: Stages 1-6 complete. Stage 7 (Demand/Requirement system) next.
+**Status**: Stages 1-7 complete. Stage 8 (Matching engine) next.

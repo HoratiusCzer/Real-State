@@ -6,14 +6,13 @@
 
 ## Quick Status
 
-**Current stage**: Stages 1–6 complete (repo audit; design system + public website foundation;
+**Current stage**: Stages 1–7 complete (repo audit; design system + public website foundation;
 full 57-entity database schema + SQL Server RLS + RBAC; JWT authentication wired to that RLS;
-Member Portal shell; full Property Exchange — listing lifecycle, server-side search, the public
-sanitized projection, a real multi-step creation wizard, and media/document storage — with
-honest placeholders remaining for the routes Stages 7-9 own). Stage 7 (Demand/Requirement
-system) next.
+Member Portal shell; full Property Exchange; full Demand/Requirement system — mirrors Property
+Exchange's architecture, no moderation per spec, many-to-many property types/locations — with
+honest placeholders remaining for the routes Stages 8-9 own). Stage 8 (Matching engine) next.
 
-**Overall progress**: 6 of 16 stages complete.
+**Overall progress**: 7 of 16 stages complete.
 
 ## How to use this tracking system
 

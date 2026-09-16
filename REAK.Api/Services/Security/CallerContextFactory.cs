@@ -1,6 +1,5 @@
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
-using REAK.Api.Services.Listings;
 
 namespace REAK.Api.Services.Security;
 

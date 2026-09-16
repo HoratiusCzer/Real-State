@@ -5,6 +5,7 @@ using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Enums;
 using REAK.Api.Services.Reference;
+using REAK.Api.Services.Security;
 
 namespace REAK.Api.Services.Listings;
 

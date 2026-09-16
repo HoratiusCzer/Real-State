@@ -5,6 +5,7 @@ using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using REAK.Api.Data;
 using REAK.Api.Services.Auth;
+using REAK.Api.Services.Demands;
 using REAK.Api.Services.Listings;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Reference;
@@ -45,6 +46,7 @@ builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
 
 builder.Services.AddScoped<IReferenceCodeGenerator, ReferenceCodeGenerator>();
 builder.Services.AddScoped<IListingService, ListingService>();
+builder.Services.AddScoped<IDemandService, DemandService>();
 // Dev-only local-disk placeholder — swap for real object storage (S3/Azure Blob) before
 // production (spec §34), same pattern as LoggingEmailSender.
 builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();

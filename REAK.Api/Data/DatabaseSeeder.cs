@@ -94,7 +94,7 @@ public static class DatabaseSeeder
     {
         "members.read", "members.create", "members.update", "members.suspend",
         "listings.read", "listings.create", "listings.update", "listings.moderate",
-        "demands.read", "demands.create",
+        "demands.read", "demands.create", "demands.update",
         "matches.read", "match_rules.manage",
         "collaboration.create", "collaboration.read",
         "cms.manage", "settings.manage", "audit.read",
@@ -124,7 +124,7 @@ public static class DatabaseSeeder
         {
             "members.read", "members.update",
             "listings.read", "listings.create", "listings.update",
-            "demands.read", "demands.create",
+            "demands.read", "demands.create", "demands.update",
             "matches.read",
             "collaboration.create", "collaboration.read",
         },
