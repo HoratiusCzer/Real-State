@@ -1,21 +1,75 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using REAK.Api.Data;
+using REAK.Api.Services.Auth;
+using REAK.Api.Services.Notifications;
+using REAK.Api.Services.Security;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Fail fast rather than silently signing tokens with a guessable/default key (spec §29 —
+// no committed secrets, and no insecure bypass). Set via the REAK_JWT_KEY environment variable
+// or `dotnet user-secrets set Jwt:Key <value>` for local development.
+var jwtKey = builder.Configuration["REAK_JWT_KEY"]
+    ?? throw new InvalidOperationException(
+        "REAK_JWT_KEY is not configured. Set it as an environment variable (or a user-secret) " +
+        "before starting the API — the JWT signing key must never be a committed default.");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "REAK.Api";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "REAK.Clients";
+
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
-builder.Services.AddDbContext<ReakDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+builder.Services.AddScoped<SessionContextConnectionInterceptor>();
+builder.Services.AddDbContext<ReakDbContext>((sp, options) =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+        .AddInterceptors(sp.GetRequiredService<SessionContextConnectionInterceptor>()));
+
+builder.Services.AddSingleton<IPasswordHasher, BCryptPasswordHasher>();
+builder.Services.AddSingleton<IJwtTokenService, JwtTokenService>();
+builder.Services.AddScoped<IUserClaimsFactory, UserClaimsFactory>();
+builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.AddScoped<IInvitationService, InvitationService>();
+builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationService>();
+// No email provider is configured for this project yet — logs instead of delivering. Swap for a
+// real provider (SendGrid/SES/SMTP) here before production (spec §34).
+builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        // Without this, the handler silently remaps short claim names ("sub", "email") to long
+        // legacy XML-namespace URIs on the way in, which breaks every FindFirstValue(sub) lookup
+        // across the API (AuthController, ActiveProfileMiddleware, the RLS session-context
+        // interceptor) even though the token was issued with the short names.
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ClockSkew = TimeSpan.FromSeconds(30),
+        };
+    });
+
+builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var context = scope.ServiceProvider.GetRequiredService<ReakDbContext>();
-    await DatabaseSeeder.SeedAsync(context);
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DatabaseSeeder");
+    await DatabaseSeeder.SeedAsync(context, builder.Configuration, logger);
 }
 
 if (app.Environment.IsDevelopment())
@@ -25,6 +79,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
+app.UseAuthentication();
+app.UseMiddleware<REAK.Api.Services.Security.ActiveProfileMiddleware>();
 app.UseAuthorization();
 
 app.MapControllers();

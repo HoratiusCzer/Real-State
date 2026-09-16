@@ -29,6 +29,8 @@ public class ReakDbContext : DbContext
     public DbSet<Permission> Permissions { get; set; } = null!;
     public DbSet<RolePermission> RolePermissions { get; set; } = null!;
     public DbSet<ProfileRoleAssignment> ProfileRoleAssignments { get; set; } = null!;
+    public DbSet<RefreshToken> RefreshTokens { get; set; } = null!;
+    public DbSet<PasswordResetToken> PasswordResetTokens { get; set; } = null!;
 
     // Reference data
     public DbSet<Province> Provinces { get; set; } = null!;
@@ -219,6 +221,28 @@ public class ReakDbContext : DbContext
         modelBuilder.Entity<MembershipApplication>(entity =>
         {
             entity.HasIndex(e => e.Email);
+        });
+
+        modelBuilder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.ProfileId);
+
+            entity.HasOne(e => e.Profile)
+                .WithMany()
+                .HasForeignKey(e => e.ProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<PasswordResetToken>(entity =>
+        {
+            entity.HasIndex(e => e.TokenHash).IsUnique();
+            entity.HasIndex(e => e.ProfileId);
+
+            entity.HasOne(e => e.Profile)
+                .WithMany()
+                .HasForeignKey(e => e.ProfileId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 

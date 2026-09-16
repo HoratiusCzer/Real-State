@@ -6,11 +6,12 @@
 
 ## Quick Status
 
-**Current stage**: Stages 1–3 complete (repo audit; design system + public website foundation
-at `web/`; full 57-entity database schema + SQL Server RLS + RBAC at `REAK.Api/`, DB name
-`real-estate`). Stage 4 (authentication + member organizations) next.
+**Current stage**: Stages 1–4 complete (repo audit; design system + public website foundation
+at `web/`; full 57-entity database schema + SQL Server RLS + RBAC; JWT authentication wired to
+that RLS via a connection interceptor, real login/logout/refresh/password-reset, and Flow A
+membership-application-to-invitation-acceptance end-to-end). Stage 5 (Member Portal) next.
 
-**Overall progress**: 3 of 16 stages complete.
+**Overall progress**: 4 of 16 stages complete.
 
 ## How to use this tracking system
 

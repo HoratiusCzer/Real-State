@@ -3,6 +3,7 @@ using REAK.Api.Models.Entities.FeatureFlags;
 using REAK.Api.Models.Entities.Identity;
 using REAK.Api.Models.Entities.Reference;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Security;
 
 namespace REAK.Api.Data;
 
@@ -16,7 +17,7 @@ namespace REAK.Api.Data;
 /// (Authentication) territory, not a hardcoded seeded credential.</summary>
 public static class DatabaseSeeder
 {
-    public static async System.Threading.Tasks.Task SeedAsync(ReakDbContext context)
+    public static async System.Threading.Tasks.Task SeedAsync(ReakDbContext context, IConfiguration configuration, ILogger logger)
     {
         await context.Database.MigrateAsync();
 
@@ -27,6 +28,66 @@ public static class DatabaseSeeder
         await SeedPurposesAsync(context);
         await SeedProvincesAsync(context);
         await SeedCurrenciesAsync(context);
+        await SeedSuperAdminAsync(context, configuration, logger);
+    }
+
+    /// <summary>Bootstraps exactly one SuperAdmin so Stage 4's admin-only endpoints (approving
+    /// membership applications, creating invitations) have someone able to call them at all — a
+    /// classic chicken-and-egg problem for a permission system with nobody in it yet. This is
+    /// intentionally NOT a hardcoded credential: it only runs when REAK_BOOTSTRAP_ADMIN_EMAIL and
+    /// REAK_BOOTSTRAP_ADMIN_PASSWORD are supplied via environment variables/user-secrets (never
+    /// committed), and only while zero System-scope role assignments exist yet — once a real
+    /// SuperAdmin exists, this is permanently a no-op, even if the env vars are still set.</summary>
+    private static async System.Threading.Tasks.Task SeedSuperAdminAsync(ReakDbContext context, IConfiguration configuration, ILogger logger)
+    {
+        var systemAdminExists = await context.ProfileRoleAssignments
+            .AnyAsync(a => a.Role.Scope == RoleScope.System);
+        if (systemAdminExists)
+        {
+            return;
+        }
+
+        var email = configuration["REAK_BOOTSTRAP_ADMIN_EMAIL"];
+        var password = configuration["REAK_BOOTSTRAP_ADMIN_PASSWORD"];
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        {
+            logger.LogWarning(
+                "No SuperAdmin exists and REAK_BOOTSTRAP_ADMIN_EMAIL/REAK_BOOTSTRAP_ADMIN_PASSWORD are not set — " +
+                "skipping bootstrap. No admin-only endpoint (invitations, membership approval) can be called until " +
+                "one exists. Set both environment variables and restart to bootstrap the first SuperAdmin.");
+            return;
+        }
+
+        if (password.Length < 8)
+        {
+            logger.LogError("REAK_BOOTSTRAP_ADMIN_PASSWORD is shorter than 8 characters — refusing to bootstrap.");
+            return;
+        }
+
+        var superAdminRole = await context.Roles.FirstAsync(r => r.Name == "SuperAdmin");
+        var profile = await context.Profiles.FirstOrDefaultAsync(p => p.Email == email);
+        if (profile is null)
+        {
+            profile = new Profile
+            {
+                Id = Guid.NewGuid(),
+                Email = email,
+                PasswordHash = new BCryptPasswordHasher().Hash(password),
+                FullName = "REAK SuperAdmin",
+                IsActive = true,
+            };
+            context.Profiles.Add(profile);
+        }
+
+        context.ProfileRoleAssignments.Add(new ProfileRoleAssignment
+        {
+            Id = Guid.NewGuid(),
+            ProfileId = profile.Id,
+            RoleId = superAdminRole.Id,
+        });
+
+        await context.SaveChangesAsync();
+        logger.LogInformation("Bootstrapped SuperAdmin account for {Email}.", email);
     }
 
     private static readonly string[] PermissionSlugs =

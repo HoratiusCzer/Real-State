@@ -18,8 +18,8 @@ in the Production Development Prompt.
 1. ✅ Repository audit + architecture confirmation — **complete 2026-09-16**
 2. ✅ Design system + public website foundation — **complete 2026-09-16**
 3. ✅ Database + migrations + RLS + RBAC — **complete 2026-09-16**
-4. ⏳ Authentication + member organizations — **next**
-5. ⏸️ Member portal
+4. ✅ Authentication + member organizations — **complete 2026-09-16**
+5. ⏳ Member portal — **next**
 6. ⏸️ Property Exchange
 7. ⏸️ Demand/Requirement system
 8. ⏸️ Matching engine
@@ -179,7 +179,81 @@ wired into the ASP.NET request pipeline yet — that requires the JWT auth middl
 Stage 4's job; until then, every predicate fails closed (no session context = no access),
 which is the correct default, not a bypass.
 
-## Stages 4–16
+## Stage 4 — Authentication + Member Organizations (✅ complete)
+
+**The critical piece**: a SQL Server `DbConnectionInterceptor`
+(`REAK.Api/Services/Security/SessionContextConnectionInterceptor.cs`) that projects the
+authenticated caller's identity onto every connection the moment EF opens it, via
+`sp_set_session_context`, reading straight off `HttpContext.User` (populated by JWT auth
+middleware before controllers run). This is what makes Stage 3's RLS predicates — written
+against `SESSION_CONTEXT('app.profile_id')` / `SESSION_CONTEXT('app.is_system_admin')` — see a
+real caller for the first time. Verified directly (not just by code review): a temporary debug
+endpoint querying `SESSION_CONTEXT` back showed the SuperAdmin's and a MemberAdmin's exact
+profile IDs and admin flags reaching the database correctly, then was deleted.
+
+**Auth**: real login/refresh/logout/change-password/forgot-password/reset-password (spec §6) —
+`REAK.Api/Services/Auth/AuthService.cs`. Access tokens are short-lived (15 min) stateless JWTs;
+refresh tokens are opaque, hashed at rest, and rotate on every use (old token revoked, new one
+issued) so replay of a stolen-but-already-used token is detectable. Password reset tokens are
+single-use and hashed the same way. `ActiveProfileMiddleware` re-checks `Profile.IsActive`
+against the database on every authenticated request — not just at login — so suspension revokes
+access immediately even for a still-unexpired JWT (spec §2.2's explicit requirement), verified
+directly: a suspended user's still-valid token was rejected mid-session.
+
+**RBAC enforcement**: JWT carries the caller's permission slugs (computed fresh from
+`ProfileRoleAssignments → Roles → RolePermissions` at login/refresh, spec §7 — never a bare role
+check) and an `is_system_admin` flag matching RLS's own bypass semantics exactly (both
+System-scope roles already hold every permission per the Stage 3 seeder). A
+`[RequirePermission("slug")]` filter gates admin endpoints — explicitly documented as a UX/API
+convenience only, since the database RLS remains the real authority regardless (spec §2.5).
+
+**Flow A end-to-end** (spec §2.4): `MembershipApplicationsController`/`Service` (public submit,
+gated by the `membership_application_enabled` feature flag; admin approve/reject) →
+`InvitationsController`/`Service` (admin creates, invitee looks up and accepts — handles both a
+brand-new profile setting its first password and an existing profile joining a second
+organization) → `EntityUser` + `ProfileRoleAssignment` rows created on acceptance. Verified with
+a real run through every step via curl: submit → approve (creates the `MemberEntity` +
+invitation) → accept → login as the new MemberAdmin → correct scoped permissions and
+member-entity claim → 403 on an admin-only action → refresh rotation → reused-old-token
+rejection → logout.
+
+**Bootstrapping problem solved**: a permission system starts with nobody in it, so nobody could
+ever call an admin-only endpoint to create the first real admin. `DatabaseSeeder.SeedSuperAdminAsync`
+resolves this — runs only while zero System-scope role assignments exist anywhere, and only if
+`REAK_BOOTSTRAP_ADMIN_EMAIL`/`REAK_BOOTSTRAP_ADMIN_PASSWORD` are supplied via environment
+variables/user-secrets (never committed, never a hardcoded default). Once a real SuperAdmin
+exists it's permanently a no-op.
+
+**No email provider exists yet.** `IEmailSender`/`LoggingEmailSender` logs instead of delivering
+invitation and password-reset emails — documented in code as a swap-in point before production
+(spec §34), not a fabricated "email sent" claim. `REAK_JWT_KEY` follows the same
+never-committed-secret pattern; `Program.cs` fails fast at startup if it's missing rather than
+falling back to an insecure default.
+
+**Frontend** (`web/`): real forms (not the earlier "not yet available" placeholders) for login,
+forgot/reset password, and membership application, plus a new `/invite/[token]` route (not one
+of spec §4.1's original 20 — added because Flow A can't complete without it once invitations are
+real). Built as Next.js Server Actions setting httpOnly session cookies — the browser never
+receives the JWT or refresh token directly, only an opaque session cookie, mitigating token
+theft via XSS (frontend checks remain UX only either way, per spec §2.5). A minimal `/portal`
+placeholder (outside the `(public)` route group, matching Stage 2's chrome-isolation decision)
+proves the round trip — reads the session, calls `/api/auth/me`, shows the signed-in user — but
+deliberately builds nothing beyond that; the real Member Portal is Stage 5. Verified: `dotnet
+build` clean; `npm run build`/`npm run lint` clean; unauthenticated `/portal` redirects to
+`/login`; a real invitation created via the API rendered correctly on `/invite/[token]`.
+
+**Known gaps for later stages**: `RefreshTokens`/`PasswordResetTokens`/`Profiles`/
+`MemberEntities`/`Invitations`/`MembershipApplications` have no RLS yet (consistent with the
+Stage 3 gap already noted for `Profile`/`MemberEntity` — reasonable Stage 13 follow-up, and not
+a live risk today since the API is the only writer and every mutation already checks ownership
+in application code). No silent/automatic access-token refresh in the browser — Server
+Components can't set response cookies mid-render and Next's own Proxy docs say Proxy isn't meant
+for full session management, so an expired 15-minute access token just means signing in again
+until Stage 5 builds real session persistence. No SMTP/email provider wired up (see above). No
+CORS configuration — unneeded so far since the browser never calls REAK.Api directly, only the
+Next.js server does; revisit if Stage 5 adds direct client-side calls.
+
+## Stages 5–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -190,4 +264,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-16
-**Status**: Stage 1 complete, Stage 2 not yet started (needs frontend stack decision)
+**Status**: Stages 1-4 complete. Stage 5 (Member Portal) next.
