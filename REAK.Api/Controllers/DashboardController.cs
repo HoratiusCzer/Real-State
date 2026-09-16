@@ -29,9 +29,11 @@ public class DashboardController(ReakDbContext db) : ControllerBase
             .Select(eu => eu.MemberEntityId)
             .ToListAsync(ct);
 
+        var savedCount = await db.SavedListings.CountAsync(s => s.ProfileId == profileId, ct);
+
         if (myEntityIds.Count == 0)
         {
-            return Ok(new DashboardSummary(0, 0, 0, 0, 0, null, 0, []));
+            return Ok(new DashboardSummary(0, 0, 0, 0, 0, savedCount, 0, []));
         }
 
         var now = DateTime.UtcNow;
@@ -75,7 +77,7 @@ public class DashboardController(ReakDbContext db) : ControllerBase
             ActiveRequirementsCount: await activeDemands.CountAsync(ct),
             PotentialMatchesCount: await potentialMatches.CountAsync(ct),
             PendingCollaborationRequestsCount: await pendingCollaborationRequests.CountAsync(ct),
-            SavedPropertiesCount: null,
+            SavedPropertiesCount: savedCount,
             ExpiringItemsCount: await expiringListings.CountAsync(ct) + await expiringDemands.CountAsync(ct),
             RecentProperties: recentProperties);
 

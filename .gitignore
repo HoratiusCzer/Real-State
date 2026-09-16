@@ -7,6 +7,7 @@ npm-debug.log*
 # .NET
 bin/
 obj/
+REAK.Api/App_Data/
 
 # Environment
 .env

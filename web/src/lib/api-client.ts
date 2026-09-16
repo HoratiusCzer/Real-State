@@ -8,7 +8,7 @@ const API_BASE = process.env.REAK_API_URL ?? "http://localhost:5080";
 export type ApiResult<T> = { ok: true; data: T } | { ok: false; error: string; status: number };
 
 async function request<T>(
-  method: "GET" | "POST" | "PATCH" | "PUT",
+  method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   body: unknown | undefined,
   accessToken: string | undefined
@@ -53,3 +53,4 @@ export const apiGet = <T>(path: string, accessToken?: string) => request<T>("GET
 export const apiPost = <T>(path: string, body: unknown, accessToken?: string) => request<T>("POST", path, body, accessToken);
 export const apiPatch = <T>(path: string, body: unknown, accessToken?: string) => request<T>("PATCH", path, body, accessToken);
 export const apiPut = <T>(path: string, body: unknown, accessToken?: string) => request<T>("PUT", path, body, accessToken);
+export const apiDelete = <T>(path: string, accessToken?: string) => request<T>("DELETE", path, undefined, accessToken);

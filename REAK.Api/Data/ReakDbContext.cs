@@ -52,6 +52,7 @@ public class ReakDbContext : DbContext
     public DbSet<ListingAmenity> ListingAmenities { get; set; } = null!;
     public DbSet<ListingContact> ListingContacts { get; set; } = null!;
     public DbSet<ListingVisibilityMember> ListingVisibilityMembers { get; set; } = null!;
+    public DbSet<SavedListing> SavedListings { get; set; } = null!;
 
     // Demands
     public DbSet<Demand> Demands { get; set; } = null!;
@@ -311,6 +312,17 @@ public class ReakDbContext : DbContext
             entity.HasIndex(e => new { e.ListingId, e.MemberEntityId }).IsUnique();
 
             entity.HasOne(e => e.Listing).WithMany(l => l.VisibilityMembers)
+                .HasForeignKey(e => e.ListingId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SavedListing>(entity =>
+        {
+            entity.HasIndex(e => new { e.ProfileId, e.ListingId }).IsUnique();
+
+            entity.HasOne(e => e.Profile).WithMany()
+                .HasForeignKey(e => e.ProfileId).OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.Listing).WithMany()
                 .HasForeignKey(e => e.ListingId).OnDelete(DeleteBehavior.Cascade);
         });
     }

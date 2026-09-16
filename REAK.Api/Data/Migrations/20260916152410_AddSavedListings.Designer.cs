@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using REAK.Api.Data;
 
@@ -11,9 +12,11 @@ using REAK.Api.Data;
 namespace REAK.Api.Data.Migrations
 {
     [DbContext(typeof(ReakDbContext))]
-    partial class ReakDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916152410_AddSavedListings")]
+    partial class AddSavedListings
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

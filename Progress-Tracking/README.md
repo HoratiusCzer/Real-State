@@ -6,13 +6,14 @@
 
 ## Quick Status
 
-**Current stage**: Stages 1–5 complete (repo audit; design system + public website foundation
-at `web/`; full 57-entity database schema + SQL Server RLS + RBAC; JWT authentication wired to
-that RLS via a connection interceptor with Flow A end-to-end; Member Portal shell with real
-dashboard/member-directory/notifications/profile/organization/settings, and honest placeholders
-for the routes Stages 6-9 own). Stage 6 (Property Exchange) next.
+**Current stage**: Stages 1–6 complete (repo audit; design system + public website foundation;
+full 57-entity database schema + SQL Server RLS + RBAC; JWT authentication wired to that RLS;
+Member Portal shell; full Property Exchange — listing lifecycle, server-side search, the public
+sanitized projection, a real multi-step creation wizard, and media/document storage — with
+honest placeholders remaining for the routes Stages 7-9 own). Stage 7 (Demand/Requirement
+system) next.
 
-**Overall progress**: 5 of 16 stages complete.
+**Overall progress**: 6 of 16 stages complete.
 
 ## How to use this tracking system
 

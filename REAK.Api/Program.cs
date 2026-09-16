@@ -1,11 +1,15 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using REAK.Api.Data;
 using REAK.Api.Services.Auth;
+using REAK.Api.Services.Listings;
 using REAK.Api.Services.Notifications;
+using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
+using REAK.Api.Services.Storage;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -38,6 +42,12 @@ builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationS
 // No email provider is configured for this project yet — logs instead of delivering. Swap for a
 // real provider (SendGrid/SES/SMTP) here before production (spec §34).
 builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+
+builder.Services.AddScoped<IReferenceCodeGenerator, ReferenceCodeGenerator>();
+builder.Services.AddScoped<IListingService, ListingService>();
+// Dev-only local-disk placeholder — swap for real object storage (S3/Azure Blob) before
+// production (spec §34), same pattern as LoggingEmailSender.
+builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -78,6 +88,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+// Serves ONLY the "listing-media" storage subfolder — listing-documents (private) is never
+// mounted here, so it has no static URL at all; it's only reachable through
+// ListingsController's authenticated, ownership-checked download action (spec §18).
+var publicMediaRoot = Path.Combine(LocalDiskFileStorage.ResolveRoot(builder.Configuration, app.Environment), "listing-media");
+Directory.CreateDirectory(publicMediaRoot);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(publicMediaRoot),
+    RequestPath = "/media",
+});
 
 app.UseAuthentication();
 app.UseMiddleware<REAK.Api.Services.Security.ActiveProfileMiddleware>();

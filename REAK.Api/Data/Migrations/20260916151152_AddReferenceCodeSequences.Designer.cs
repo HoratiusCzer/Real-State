@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using REAK.Api.Data;
 
@@ -11,9 +12,11 @@ using REAK.Api.Data;
 namespace REAK.Api.Data.Migrations
 {
     [DbContext(typeof(ReakDbContext))]
-    partial class ReakDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260916151152_AddReferenceCodeSequences")]
+    partial class AddReferenceCodeSequences
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1757,31 +1760,6 @@ namespace REAK.Api.Data.Migrations
                         });
                 });
 
-            modelBuilder.Entity("REAK.Api.Models.Entities.Listings.SavedListing", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<Guid>("ListingId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.Property<Guid>("ProfileId")
-                        .HasColumnType("uniqueidentifier");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ListingId");
-
-                    b.HasIndex("ProfileId", "ListingId")
-                        .IsUnique();
-
-                    b.ToTable("SavedListings");
-                });
-
             modelBuilder.Entity("REAK.Api.Models.Entities.Matching.Match", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3072,25 +3050,6 @@ namespace REAK.Api.Data.Migrations
                     b.Navigation("UpdatedByProfile");
 
                     b.Navigation("Ward");
-                });
-
-            modelBuilder.Entity("REAK.Api.Models.Entities.Listings.SavedListing", b =>
-                {
-                    b.HasOne("REAK.Api.Models.Entities.Listings.PropertyListing", "Listing")
-                        .WithMany()
-                        .HasForeignKey("ListingId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("REAK.Api.Models.Entities.Identity.Profile", "Profile")
-                        .WithMany()
-                        .HasForeignKey("ProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Listing");
-
-                    b.Navigation("Profile");
                 });
 
             modelBuilder.Entity("REAK.Api.Models.Entities.Matching.Match", b =>

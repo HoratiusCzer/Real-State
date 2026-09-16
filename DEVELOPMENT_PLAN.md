@@ -20,8 +20,8 @@ in the Production Development Prompt.
 3. ✅ Database + migrations + RLS + RBAC — **complete 2026-09-16**
 4. ✅ Authentication + member organizations — **complete 2026-09-16**
 5. ✅ Member portal — **complete 2026-09-16**
-6. ⏳ Property Exchange — **next**
-7. ⏸️ Demand/Requirement system
+6. ✅ Property Exchange — **complete 2026-09-16**
+7. ⏳ Demand/Requirement system — **next**
 8. ⏸️ Matching engine
 9. ⏸️ Collaboration
 10. ⏸️ Notifications
@@ -308,7 +308,88 @@ verified via HTTP requests with cookies set directly rather than an actual brows
 visual QA and the Server Action submit flow itself (as opposed to the API calls underneath it)
 are unverified by an actual browser.
 
-## Stages 6–16
+## Stage 6 — Property Exchange (✅ complete)
+
+**Prerequisite gap closed first**: PropertyType/PropertySubtype/Amenity/District/Municipality/
+Ward/Locality were deliberately left empty in Stage 3 (spec §22 — no exhaustive list was given,
+inventing one would be fabricated business data) but a listing's schema requires all of them as
+non-null FKs. `ReferenceDataController` adds minimal admin-configurable CRUD (read for anyone,
+create gated by `settings.manage`) — just enough that an admin can genuinely configure the
+taxonomy Property Exchange depends on, not a full manage/edit/reorder UI (that stays Stage 11's
+job). `Purpose` turned out to be shared between listings ("Sale"/"Rent"-shaped) and demands
+("Buyer"/"Tenant"/"Investor"/"Other", per spec §9's explicit list) on the same table — matches
+the entity's original doc comment, just needed an admin to actually add listing-shaped values
+too, which this same endpoint now allows.
+
+**ReferenceCode generation** (deferred explicitly since Stage 3): `IReferenceCodeGenerator` +
+two SQL Server `SEQUENCE` objects (`ListingReferenceCodeSeq`, `DemandReferenceCodeSeq`) —
+atomic under concurrent inserts, never client-supplied (spec §21). Produces codes like
+`RK-L-2026-000001`.
+
+**Design decision on the multi-step wizard** (spec §8.2): the database requires
+PropertyTypeId/PurposeId/Title/full location/LandArea/AreaUnitId/CurrencyId/Price as NOT NULL
+columns, so a listing can't exist as a true partial row before those are known. The wizard
+accumulates the first 5 steps (Type, Basic Information, Location, Specifications, Price)
+entirely client-side, creates the Draft row the moment all of them are known, then every
+subsequent step (Amenities, Photos, Documents, Description, Contact, Visibility, Expiry)
+persists against that real listing — satisfying "save draft, continue, back" without needing a
+schema change, and giving Photos/Documents a real listing to attach to (spec's own step order
+puts photo/document upload after Amenities, which lines up with this).
+
+**Media/document storage**: `IFileStorage`/`LocalDiskFileStorage` — a dev-only placeholder
+(documented for swap to S3/Azure Blob before production, same pattern as Stage 4's
+`LoggingEmailSender`). Public listing photos are served statically from a directory scoped
+*only* to the `listing-media` container; private documents have no static route at all — every
+read goes through `ListingsController`'s authenticated, ownership-checked download action (spec
+§18). Verified directly: a guessed `/media/listing-documents/...` URL 404s unconditionally, and
+a non-owner with network-read access to the listing gets 403 on the download endpoint despite
+being able to see the listing itself.
+
+**RLS carries the authorization weight it was built for in Stage 3**: `ListingService`'s
+mutating methods rely on `PropertyListings`' RLS block predicate to reject a non-owner's write —
+`SaveGuardedAsync` catches the resulting `SqlException` and translates it to a clean 403 rather
+than a 500. `ListingMedia`/`ListingDocument` have no RLS of their own (documented Stage 3/13
+gap), so `ListingsController` does an explicit ownership check before touching them. The public
+projection endpoint (`PublicPropertiesController`, spec §16) re-derives every gate explicitly
+(flag AND Approved AND IsPublicVisible AND active member AND not expired) as deliberate
+defense-in-depth on top of RLS's own public branch, with a hand-picked field allowlist — never
+the raw entity, never `InternalNotes` or `ListingContact`.
+
+Also added `SavedListing` (spec §8.1's "saved properties", no entity existed for it) — small,
+per-profile, no RLS (same pattern as Notifications), which also finally gives Stage 5's
+dashboard a real number instead of `null` for "Saved Properties".
+
+**Verified end-to-end via the actual running app** (API directly, then again through the
+Next.js pages with session cookies set): full lifecycle (create → submit → approve/reject →
+archive → soft-delete) across the moderation-on and moderation-off paths; cross-org read
+visibility after a network-share vs. write still blocked; contact info never leaking to a
+non-owner even with network read access; media upload + static serving + document upload +
+authenticated-only download + 403 for a non-owner; public search/detail with the feature flag
+off (disabled state) and on (real listing returned, no contact field present); the homepage's
+featured-properties section and both portal and public browse/detail pages rendering real data
+fetched live from the API. `dotnet build` and `npm run build`/`lint` clean throughout.
+`rls_test.sql`'s 7 scenarios rerun after all three new migrations — still pass.
+
+**Frontend architecture note**: added a small same-origin proxy layer
+(`web/src/app/api/reference/[...path]` for read-only taxonomy lookups, and
+`web/src/app/api/portal/listings/[id]/{media,documents}` for authenticated uploads) so the
+listing wizard's client-side cascading location dropdowns and upload-progress reporting (spec
+§8.2) work without the browser ever calling REAK.Api cross-origin or holding the access token
+itself — consistent with Stage 4's httpOnly-cookie security model. Upload progress uses `XMLHttpRequest`
+(still the only mechanism with real upload-progress events across browsers) against these proxies.
+
+**Known gaps for later stages**: `ListingMedia`/`ListingDocument` still have no RLS (Stage 13,
+unchanged from Stage 3 — the explicit ownership checks added this stage are real but live in
+application code); the wizard's Visibility step only exposes Owner-only/All-members (the API
+supports `SelectedMembers` with a specific org picker too, just not wired into this UI — a
+reasonable scope cut given time, revisit if members ask for it); no signed/expiring URLs for
+private documents (local-disk auth-gated download stands in for that until real object storage
+lands); Nepal's district/municipality/ward/locality hierarchy is still empty by default (Stage 3's
+decision holds — admins add real data via `ReferenceDataController`, nothing fabricated here
+either, and this session's test fixtures for it were left in the dev DB as legitimate
+config data, not business data).
+
+## Stages 7–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -319,4 +400,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-16
-**Status**: Stages 1-5 complete. Stage 6 (Property Exchange) next.
+**Status**: Stages 1-6 complete. Stage 7 (Demand/Requirement system) next.
