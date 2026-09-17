@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Demands;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Matching;
 using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
 
@@ -16,8 +17,9 @@ namespace REAK.Api.Services.Demands;
 /// Location are proper many-to-many join tables here rather than single required FKs, since a
 /// demand can accept several property types and several acceptable locations at whatever
 /// hierarchy depth the client cares about (spec §9: "do not model relationships as arrays — use
-/// proper join tables").</summary>
-public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator) : IDemandService
+/// proper join tables"). Also mirrors ListingService's Stage 8 matching-engine trigger points —
+/// see SaveGuardedAndRecomputeAsync.</summary>
+public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine) : IDemandService
 {
     public async Task<DemandSearchResult> SearchAsync(DemandSearchQuery query, CallerContext? caller, CancellationToken ct = default)
     {
@@ -167,7 +169,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<DemandOp> PublishAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -182,7 +184,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.Status = DemandStatus.Active;
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<DemandOp> FulfillAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -235,7 +237,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         }
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<DemandOp> ReplaceLocationsAsync(Guid id, CallerContext caller, IReadOnlyList<DemandLocationInput> locations, CancellationToken ct = default)
@@ -255,7 +257,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         }
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<DemandOp> ReplaceAmenitiesAsync(Guid id, CallerContext caller, IReadOnlyList<Guid> amenityIds, CancellationToken ct = default)
@@ -270,7 +272,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         }
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<DemandOp> UpdateVisibilityAsync(Guid id, CallerContext caller, UpdateDemandVisibilityRequest request, CancellationToken ct = default)
@@ -380,6 +382,16 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
             }
             return new DemandOp(DemandOpResult.Forbidden, "You don't have permission to modify this requirement.");
         }
+    }
+
+    private async Task<DemandOp> SaveGuardedAndRecomputeAsync(Guid demandId, CancellationToken ct)
+    {
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == DemandOpResult.Success)
+        {
+            await matchingEngine.RecomputeForDemandAsync(demandId, ct);
+        }
+        return op;
     }
 
     private static bool IsRlsBlockPredicateViolation(DbUpdateException ex) =>

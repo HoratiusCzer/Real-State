@@ -22,8 +22,8 @@ in the Production Development Prompt.
 5. ✅ Member portal — **complete 2026-09-16**
 6. ✅ Property Exchange — **complete 2026-09-16**
 7. ✅ Demand/Requirement system — **complete 2026-09-16**
-8. ⏳ Matching engine — **next**
-9. ⏸️ Collaboration
+8. ✅ Matching engine — **complete 2026-09-17**
+9. ⏳ Collaboration — **next**
 10. ⏸️ Notifications
 11. ⏸️ Admin + CMS
 12. ⏸️ Feature flags + reports + audit
@@ -472,7 +472,106 @@ never specifically verified either. Two things came out of it:
   Collaboration/Notifications/Admin) rather than something each stage should wire in piecemeal —
   correctly deferred, now explicitly documented rather than silently absent.
 
-## Stages 8–16
+## Stage 8 — Matching Engine (✅ complete)
+
+**Scoring core** (`MatchingEngine`, spec §12): every number that shapes a score — which
+criteria count, their weights, whether a failed criterion excludes the pair entirely, tolerance
+percentages — comes from the currently *Published* `MatchRuleSet`'s `MatchRule` rows, never a
+literal in application code. Nine criteria implemented (Location, Price/budget, Area,
+PropertyType, Purpose, Bedrooms, Bathrooms, Amenities, plus Furnishing — which always reports
+`MissingData` since `Demand` has no furnishing-preference field in the Stage 3 schema and spec
+§9 never asked for one; documented rather than silently guessed). A criterion with no data on
+*either* side is excluded from both the score's numerator and denominator rather than counted
+as a fail — a listing shouldn't be penalized for a preference a requirement never stated. If no
+rule set is published, the engine — and the API — correctly show "Matching is not yet
+configured by REAK" (spec's exact wording) rather than generating score-0 placeholder matches.
+`MatchRuleSetsController` gives admins the minimal CRUD needed to actually create/publish rule
+sets (same "unblock the feature, defer the full manage UI to Stage 11" pattern as Stage 6's
+`ReferenceDataController`).
+
+**Recompute is wired into the exact points spec Flow C calls for** ("a listing or demand is
+created or updated"): `ListingService`/`DemandService`'s submit/approve/update/replace-set
+methods each call the engine afterward via a small `SaveGuardedAndRecomputeAsync` wrapper — the
+engine itself no-ops if the listing/demand isn't in an eligible status or no rule set is
+published, so every plausible call site can call it unconditionally rather than each
+re-deciding whether a recompute is warranted. A member's own shortlist/dismiss/reopen decision
+on a `Match.Status` is deliberately left untouched by recomputation (verified live) — an edited
+listing shouldn't silently un-dismiss a match someone already reviewed.
+
+**Two genuine, non-obvious bugs found and fixed while building this** (both caught by actually
+running the thing against two real organizations, not by reading the code):
+
+1. **The matching engine couldn't see across organizations at all.** It shares its `DbContext`/
+   connection with the HTTP request that triggered it, and Stage 4's RLS interceptor had
+   already stamped that connection with the *triggering user's* session context. Searching "every
+   Approved listing" to match a demand against silently RLS-filtered down to only what that one
+   user could already see — exactly backwards for a system-level computation that has to see
+   across every organization to do its job. A first fix (a single `sp_set_session_context` call
+   before the engine's queries) didn't work: EF Core opens and closes its connection around each
+   *individual* operation, not once per request, so the interceptor re-stamped the ambient
+   caller's identity back onto the connection before the very next query ran. The real fix is
+   `SessionContextOverride` — a scoped flag the interceptor checks on every connection-open,
+   set for the duration of a recompute (or a `MatchesController`/`DashboardController` query that
+   has the same cross-tenant-join shape) and reset in a `finally`. This is spec §20's
+   "security-sensitive database function" pattern, implemented explicitly rather than assumed:
+   narrow scope, only for the operation that needs it, and the actual authorization decision
+   (who gets told about a match) stays in application code, never delegated to the elevated read.
+2. **The same JOIN-collapse pattern hit `MatchesController` and `DashboardController`'s
+   `PotentialMatchesCount`.** Any query that reads `m.Listing.MemberEntityId` *and*
+   `m.Demand.MemberEntityId` in the same LINQ expression joins to both PropertyListings and
+   Demands, and RLS's filter predicate applies to a table the instant it's a JOIN target —
+   regardless of which columns end up selected. A listing owner who doesn't also own the
+   matched demand (the normal case) would have their own match silently hidden by the INNER
+   JOIN to the demand side they can't see. Same `SessionContextOverride` fix, same "elevate to
+   read, authorize in C#" pattern each of those controllers already used for their own explicit
+   ownership checks.
+
+Caught the first one only because a match that should obviously have existed (two matching,
+freshly-created, freshly-approved records) simply never appeared — traced it by hand rather
+than assuming the constraint tolerances were the culprit. Caught the second live-testing cross-
+org isolation on `MatchesController.Get`/`Search` immediately afterward, on the hypothesis that
+the exact same JOIN shape would have the exact same problem — it did.
+
+**Authorization model for the matching tables**: none of `Match`/`MatchComponent`/
+`MatchRuleSet`/`MatchRule`/`MatchAction` have RLS (spec's own tables list never asked for it,
+and a Match row reveals a compatibility relationship between two specific organizations' private
+data — arguably more sensitive than either side alone). `MatchesController` does its own
+explicit check everywhere: a caller may see/act on a match only if their org owns the listing OR
+the demand, or they're a system admin — deliberately more conservative than Listing/Demand RLS
+itself, since network-shared visibility of one side was never meant to imply visibility of the
+match.
+
+**Frontend**: `/portal/matches` (browse, showing the "not configured" state verbatim when no
+rule set is published) and `/portal/matches/:id` (full explanation — score, rule set/version,
+per-criterion pass/partial/fail/missing-data with detail text, calculation timestamp — plus the
+five member actions from spec §12.1: shortlist, dismiss, reopen, request collaboration, report
+incorrect data). "Request collaboration" is recorded as an auditable `MatchAction` but
+deliberately does not create a `CollaborationRequest`/`CollaborationWorkspace` yet — that wiring
+is Stage 9's job; the response says so explicitly rather than silently no-opping.
+
+**Verified end-to-end**, methodically, after the two bugs above were fixed: a real rule set
+(Location required, PropertyType required, Price weighted with a 10% tolerance, Bedrooms
+weighted) computed a 100% match for a genuinely compatible listing/demand pair; pushing price
+4.55% over budget correctly produced a Partial result and dropped the score to 85 (exact
+weighted-average arithmetic verified by hand); pushing it 82% over correctly Failed without
+excluding the pair (score 70, since Price wasn't marked required); changing the listing's
+property type to something outside the demand's accepted list correctly excluded the pair
+entirely (the Match row was deleted, confirmed via both a 404 on detail and a 0-count search);
+a third, uninvolved organization got a 403 on both the match detail and the record-action
+endpoint; shortlisting a match survived a subsequent listing edit without reverting to New;
+request-collaboration correctly noted the Stage 9 deferral. Reran the full `rls_test.sql` suite
+after all of this — still 7/7, no regression from the interceptor changes. `dotnet build` and
+`npm run build`/`lint` clean throughout. All test fixtures cleaned from the dev database.
+
+**Known gaps for later stages**: match rule sets can only be authored via the API directly
+(curl/Postman today) — a real admin UI for building rule sets, previewing their effect, and
+managing versions is Stage 11's job, same as every other admin-configuration surface so far.
+Recompute is synchronous and O(n) per triggering write (every Approved listing × every Active
+demand, scoped one-sided) — fine at current scale; if REAK's catalog grows large this is the
+natural point to move to a background job queue, but that would be solving a problem that
+doesn't exist yet (no premature optimization).
+
+## Stages 9–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -482,5 +581,5 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 
 ---
 
-**Last updated**: 2026-09-16
-**Status**: Stages 1-7 complete. Stage 8 (Matching engine) next.
+**Last updated**: 2026-09-17
+**Status**: Stages 1-8 complete. Stage 9 (Collaboration) next.

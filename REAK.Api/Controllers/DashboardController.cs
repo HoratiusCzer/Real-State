@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Security;
 
 namespace REAK.Api.Controllers;
 
@@ -14,11 +15,18 @@ namespace REAK.Api.Controllers;
 /// today because nothing can create a listing/demand/match/collaboration yet (Stages 6-9). Scoped
 /// explicitly to the caller's own MemberEntityIds rather than relying on PropertyListings/Demands'
 /// RLS filter alone — RLS's read predicate also allows network-shared listings from OTHER
-/// organizations, which is a broader set than "my dashboard" should mean.</summary>
+/// organizations, which is a broader set than "my dashboard" should mean.
+///
+/// PotentialMatchesCount joins through both PropertyListings and Demands (RLS-protected tables)
+/// to read MemberEntityId off each side — same issue MatchesController hit and fixed: an INNER
+/// JOIN to an RLS-protected table silently drops a row the caller should see via the *other*
+/// side alone, so this needs the same SessionContextOverride elevation for that one query, with
+/// the explicit MemberEntityIds.Contains(...) check (already present) remaining the real
+/// authorization.</summary>
 [ApiController]
 [Route("api/dashboard")]
 [Authorize]
-public class DashboardController(ReakDbContext db) : ControllerBase
+public class DashboardController(ReakDbContext db, SessionContextOverride sessionContextOverride) : ControllerBase
 {
     [HttpGet("summary")]
     public async Task<ActionResult<DashboardSummary>> Summary(CancellationToken ct)
@@ -49,9 +57,18 @@ public class DashboardController(ReakDbContext db) : ControllerBase
         var activeDemands = db.Demands.Where(d =>
             myEntityIds.Contains(d.MemberEntityId) && !d.IsDeleted && d.Status == DemandStatus.Active);
 
-        var potentialMatches = db.Matches.Where(m =>
-            m.Status == MatchStatus.New &&
-            (myEntityIds.Contains(m.Listing.MemberEntityId) || myEntityIds.Contains(m.Demand.MemberEntityId)));
+        sessionContextOverride.IsSystemLevel = true;
+        int potentialMatchesCount;
+        try
+        {
+            potentialMatchesCount = await db.Matches.CountAsync(m =>
+                m.Status == MatchStatus.New &&
+                (myEntityIds.Contains(m.Listing.MemberEntityId) || myEntityIds.Contains(m.Demand.MemberEntityId)), ct);
+        }
+        finally
+        {
+            sessionContextOverride.IsSystemLevel = false;
+        }
 
         var pendingCollaborationRequests = db.CollaborationRequests.Where(r =>
             myEntityIds.Contains(r.ToMemberEntityId) && r.Status == CollaborationRequestStatus.Pending);
@@ -75,7 +92,7 @@ public class DashboardController(ReakDbContext db) : ControllerBase
             ActivePropertiesCount: await activeListings.CountAsync(ct),
             DraftPropertiesCount: await draftListings.CountAsync(ct),
             ActiveRequirementsCount: await activeDemands.CountAsync(ct),
-            PotentialMatchesCount: await potentialMatches.CountAsync(ct),
+            PotentialMatchesCount: potentialMatchesCount,
             PendingCollaborationRequestsCount: await pendingCollaborationRequests.CountAsync(ct),
             SavedPropertiesCount: savedCount,
             ExpiringItemsCount: await expiringListings.CountAsync(ct) + await expiringDemands.CountAsync(ct),

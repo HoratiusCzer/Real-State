@@ -6,13 +6,14 @@
 
 ## Quick Status
 
-**Current stage**: Stages 1–7 complete (repo audit; design system + public website foundation;
+**Current stage**: Stages 1–8 complete (repo audit; design system + public website foundation;
 full 57-entity database schema + SQL Server RLS + RBAC; JWT authentication wired to that RLS;
-Member Portal shell; full Property Exchange; full Demand/Requirement system — mirrors Property
-Exchange's architecture, no moderation per spec, many-to-many property types/locations — with
-honest placeholders remaining for the routes Stages 8-9 own). Stage 8 (Matching engine) next.
+Member Portal shell; full Property Exchange; full Demand/Requirement system; the matching
+engine — admin-configured scoring rules, full explainability, and a real cross-tenant RLS bug
+class found and fixed along the way — with honest placeholders remaining for the routes Stage 9
+owns). Stage 9 (Collaboration) next.
 
-**Overall progress**: 7 of 16 stages complete.
+**Overall progress**: 8 of 16 stages complete.
 
 ## How to use this tracking system
 
@@ -29,4 +30,4 @@ REAK requirements in `Requirement/`. That work is archived in `archive/` — see
 
 ---
 
-**Last updated**: 2026-09-16
+**Last updated**: 2026-09-17

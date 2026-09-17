@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Matching;
 using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
 
@@ -14,8 +15,12 @@ namespace REAK.Api.Services.Listings;
 /// (Data/Security/RowLevelSecurity.sql) as the actual write authority — a caller who can read a
 /// listing (e.g. via network-visibility sharing) but doesn't own it will have their UPDATE/DELETE
 /// blocked at the database engine level, surfacing here as a SqlException we translate to
-/// Forbidden rather than letting it become an unhandled 500.</summary>
-public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator) : IListingService
+/// Forbidden rather than letting it become an unhandled 500. Also triggers Stage 8's matching
+/// engine (Flow C, spec §2.4/§12: "a listing or demand is created or updated") at every point
+/// that could newly qualify a listing for matching or change data that affects an existing
+/// match's score — the engine itself no-ops when the listing isn't Approved or no rule set is
+/// published, so it's safe to call unconditionally rather than duplicating that logic here.</summary>
+public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine) : IListingService
 {
     public async Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, CallerContext? caller, CancellationToken ct = default)
     {
@@ -214,7 +219,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<ListingOp> SubmitAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -240,7 +245,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<ListingOp> ApproveAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -257,7 +262,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.ApprovedAt = DateTime.UtcNow;
         listing.RejectionReason = null;
 
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<ListingOp> RejectAsync(Guid id, CallerContext caller, string reason, CancellationToken ct = default)
@@ -316,7 +321,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        return await SaveGuardedAndRecomputeAsync(id, ct);
     }
 
     public async Task<ListingOp> UpdateVisibilityAsync(Guid id, CallerContext caller, UpdateListingVisibilityRequest request, CancellationToken ct = default)
@@ -429,6 +434,21 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             }
             return new ListingOp(ListingOpResult.Forbidden, "You don't have permission to modify this listing.");
         }
+    }
+
+    /// <summary>Saves, then — only on success — asks the matching engine to recompute this
+    /// listing's matches. The engine itself no-ops if the listing isn't Approved or no rule set
+    /// is published, so every call site that could plausibly affect matching eligibility or score
+    /// just calls this instead of SaveGuardedAsync, rather than each one re-deciding whether a
+    /// recompute is warranted.</summary>
+    private async Task<ListingOp> SaveGuardedAndRecomputeAsync(Guid listingId, CancellationToken ct)
+    {
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == ListingOpResult.Success)
+        {
+            await matchingEngine.RecomputeForListingAsync(listingId, ct);
+        }
+        return op;
     }
 
     private static bool IsRlsBlockPredicateViolation(DbUpdateException ex) =>

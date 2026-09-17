@@ -15,8 +15,14 @@ namespace REAK.Api.Services.Security;
 ///
 /// Unauthenticated requests (no bearer token, or an invalid/expired one) leave both keys unset,
 /// which is the correct fail-closed default the RLS predicates were written against — no session
-/// context means no access to anything RLS-gated, not a bypass.</summary>
-public class SessionContextConnectionInterceptor(IHttpContextAccessor httpContextAccessor) : DbConnectionInterceptor
+/// context means no access to anything RLS-gated, not a bypass.
+///
+/// EF Core opens and closes its connection around each individual operation, not once per
+/// request, so this runs again before every query — that's why SessionContextOverride (rather
+/// than a single ad hoc `sp_set_session_context` call from inside a multi-query operation) is
+/// the only way a system-level operation like the matching engine can stay elevated across a
+/// whole sequence of queries.</summary>
+public class SessionContextConnectionInterceptor(IHttpContextAccessor httpContextAccessor, SessionContextOverride sessionContextOverride) : DbConnectionInterceptor
 {
     public override async Task ConnectionOpenedAsync(
         DbConnection connection,
@@ -35,21 +41,30 @@ public class SessionContextConnectionInterceptor(IHttpContextAccessor httpContex
 
     private async Task SetSessionContextAsync(DbConnection connection, CancellationToken ct)
     {
-        var user = httpContextAccessor.HttpContext?.User;
-        if (user?.Identity?.IsAuthenticated != true)
-        {
-            return;
-        }
-
-        var profileIdClaim = user.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
-        if (!Guid.TryParse(profileIdClaim, out var profileId))
-        {
-            return;
-        }
-
-        var isSystemAdmin = user.FindFirst(ClaimsNames.IsSystemAdmin)?.Value == "true";
-
         if (connection is not SqlConnection)
+        {
+            return;
+        }
+
+        var profileId = Guid.Empty;
+        bool isSystemAdmin;
+
+        var user = httpContextAccessor.HttpContext?.User;
+        var profileIdClaim = user?.FindFirst(System.IdentityModel.Tokens.Jwt.JwtRegisteredClaimNames.Sub)?.Value;
+        var hasAmbientIdentity = user?.Identity?.IsAuthenticated == true && Guid.TryParse(profileIdClaim, out profileId);
+
+        if (sessionContextOverride.IsSystemLevel)
+        {
+            // Keep the real caller's profile id if one exists (e.g. an authenticated admin
+            // triggered the recompute) purely for traceability — is_system_admin=1 alone is
+            // what actually grants the bypass in every RLS predicate.
+            isSystemAdmin = true;
+        }
+        else if (hasAmbientIdentity)
+        {
+            isSystemAdmin = user!.FindFirst(ClaimsNames.IsSystemAdmin)?.Value == "true";
+        }
+        else
         {
             return;
         }

@@ -7,6 +7,7 @@ using REAK.Api.Data;
 using REAK.Api.Services.Auth;
 using REAK.Api.Services.Demands;
 using REAK.Api.Services.Listings;
+using REAK.Api.Services.Matching;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
@@ -29,6 +30,7 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApi();
 
+builder.Services.AddScoped<SessionContextOverride>();
 builder.Services.AddScoped<SessionContextConnectionInterceptor>();
 builder.Services.AddDbContext<ReakDbContext>((sp, options) =>
     options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
@@ -45,6 +47,7 @@ builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationS
 builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
 
 builder.Services.AddScoped<IReferenceCodeGenerator, ReferenceCodeGenerator>();
+builder.Services.AddScoped<IMatchingEngine, MatchingEngine>();
 builder.Services.AddScoped<IListingService, ListingService>();
 builder.Services.AddScoped<IDemandService, DemandService>();
 // Dev-only local-disk placeholder — swap for real object storage (S3/Azure Blob) before
