@@ -30,6 +30,12 @@ public class AuthService(
         // them lets an attacker enumerate registered emails.
         if (profile is null || !profile.IsActive || !passwordHasher.Verify(password, profile.PasswordHash))
         {
+            // Security event (spec §33: "Log: authentication failures... security events") — the
+            // attempted email is logged for brute-force/enumeration detection, the password never
+            // is. actorProfileId is null when the account doesn't exist at all; still logged, since
+            // repeated failures against a *nonexistent* email are exactly what account enumeration
+            // looks like.
+            await auditLogService.LogAsync(profile?.Id, "LoginFailed", "Profile", profile?.Id, $"Failed login attempt for {email}.", ct);
             return new AuthResult(false, "Invalid email or password, or the account is inactive.", null);
         }
 

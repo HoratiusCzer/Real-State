@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
@@ -15,6 +16,7 @@ public class AuthController(IAuthService authService, ReakDbContext db) : Contro
 {
     [HttpPost("login")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<ActionResult<TokenResponse>> Login(LoginRequest request, CancellationToken ct)
     {
         var result = await authService.LoginAsync(request.Email, request.Password, HttpContext.Connection.RemoteIpAddress?.ToString(), ct);
@@ -83,6 +85,7 @@ public class AuthController(IAuthService authService, ReakDbContext db) : Contro
 
     [HttpPost("forgot-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ForgotPassword(ForgotPasswordRequest request, CancellationToken ct)
     {
         await authService.ForgotPasswordAsync(request.Email, ct);
@@ -92,6 +95,7 @@ public class AuthController(IAuthService authService, ReakDbContext db) : Contro
 
     [HttpPost("reset-password")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> ResetPassword(ResetPasswordRequest request, CancellationToken ct)
     {
         var success = await authService.ResetPasswordAsync(request.Token, request.NewPassword, ct);

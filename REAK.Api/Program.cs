@@ -1,5 +1,7 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
@@ -85,6 +87,26 @@ builder.Services
 
 builder.Services.AddAuthorization();
 
+// Rate limiting on the endpoints most attractive to credential-stuffing/enumeration attacks
+// (spec §13 hardening) — login, password reset, and the two public unauthenticated write paths
+// (membership applications, invitation acceptance). Keyed by client IP, not by account, so it
+// can't itself be used to lock a real user out by hammering their email. 429s are cheap and
+// expected under abuse; a real user retrying a typo'd password a handful of times in a minute
+// never comes close to the limit.
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("auth", httpContext => RateLimitPartition.GetSlidingWindowLimiter(
+        httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            SegmentsPerWindow = 4,
+            QueueLimit = 0,
+        }));
+});
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -99,7 +121,36 @@ if (app.Environment.IsDevelopment())
     app.MapOpenApi();
 }
 
+if (!app.Environment.IsDevelopment())
+{
+    // Only meaningful once actually deployed behind HTTPS — HSTS on plain HTTP localhost would
+    // just make local dev painful for zero benefit.
+    app.UseHsts();
+}
+
 app.UseHttpsRedirection();
+
+// A handful of defense-in-depth response headers (spec §13 hardening) — none of these replace a
+// real security decision made elsewhere (RLS, permission checks, CORS-by-omission below), they
+// just remove a few classes of attack a misconfigured client or an embedding page could otherwise
+// exploit. CSP is deliberately narrow: this API serves JSON plus one static image directory, never
+// HTML a browser would execute script from, so "default-src 'none'" is correct, not merely strict.
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'");
+    await next();
+});
+
+// No CORS policy is registered — deliberately, not an oversight. Every browser-originated request
+// in this architecture is same-origin: Next.js Server Components call this API server-to-server
+// (no browser involved, CORS doesn't apply), and the only browser-JS calls go to Next.js's own
+// same-origin proxy routes, never directly here (see e.g. the collaboration file-download proxy).
+// Registering a CORS policy with no real cross-origin caller to serve would only widen the attack
+// surface for no benefit — ASP.NET Core's default of rejecting cross-origin browser requests when
+// no policy exists is the secure choice for this shape of app.
 
 // Serves ONLY the "listing-media" storage subfolder — listing-documents (private) is never
 // mounted here, so it has no static URL at all; it's only reachable through
@@ -112,6 +163,7 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/media",
 });
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseMiddleware<REAK.Api.Services.Security.ActiveProfileMiddleware>();
 app.UseAuthorization();

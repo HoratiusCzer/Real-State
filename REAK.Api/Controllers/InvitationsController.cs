@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
@@ -53,6 +54,7 @@ public class InvitationsController(IInvitationService invitationService, ReakDbC
 
     [HttpGet("{token}")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Lookup(string token, CancellationToken ct)
     {
         var result = await invitationService.LookupAsync(token, ct);
@@ -61,6 +63,7 @@ public class InvitationsController(IInvitationService invitationService, ReakDbC
 
     [HttpPost("{token}/accept")]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Accept(string token, AcceptInvitationRequest request, CancellationToken ct)
     {
         var (success, error) = await invitationService.AcceptAsync(token, request.Password, ct);

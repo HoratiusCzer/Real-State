@@ -27,7 +27,7 @@ in the Production Development Prompt.
 10. ✅ Notifications — **complete 2026-09-17**
 11. ✅ Admin + CMS — **complete 2026-09-17**
 12. ✅ Feature flags + reports + audit — **complete 2026-09-17**
-13. ⏸️ Security hardening
+13. ✅ Security hardening — **complete 2026-09-17**
 14. ⏸️ Performance + accessibility + responsive QA
 15. ⏸️ Full regression testing
 16. ⏸️ Documentation + production readiness
@@ -932,7 +932,77 @@ demo data exercised across Stages 8-11) — this is an ordinary admin action, no
 seeded defaults, which remain off. Every other flag remains off, including the genuinely-reserved
 ones.
 
-## Stages 13–16
+## Stage 13 — Security Hardening (✅ complete)
+
+**No dedicated spec section** — unlike every other stage so far, "Security hardening" has no §
+of its own; it's named only in §2.6's stage list (grepped the whole spec for "rate limit",
+"CORS", "CSRF", "XSS", "security header", "brute force" — zero hits). Scoped this stage around
+standard hardening measures genuinely relevant to this specific app, prioritizing spec-adjacent
+gaps over generic checklist items, and building on the strong foundation already in place (RLS,
+JWT, RBAC, BCrypt password hashing, audit logging from Stage 12) rather than re-litigating it.
+
+**Closed a real gap spec §33 explicitly names but Stage 12 didn't cover**: "Log: authentication
+failures... authorization failures... security events". Stage 12 only logged *successful* logins.
+`AuthService.LoginAsync`'s failure branch now logs `LoginFailed` (the attempted email, for
+brute-force/enumeration detection — never the password, and logged even when the account doesn't
+exist, since repeated failures against a nonexistent email *is* what enumeration looks like).
+`RequirePermissionAttribute` — the shared gate behind nearly every permission-protected endpoint —
+now logs `AuthorizationFailed` (actor if authenticated, permission slug, method + path) the moment
+it denies a request; attribute filters aren't constructor-injected, so `IAuditLogService` is
+resolved from `HttpContext.RequestServices` inside the filter, the standard pattern for this.
+
+**Rate limiting** (ASP.NET Core's built-in `Microsoft.AspNetCore.RateLimiting`, no new
+dependency): a sliding-window limiter (5 requests/minute per IP) applied to every endpoint that's
+actually attractive to credential-stuffing or enumeration — `login`, `forgot-password`,
+`reset-password`, the public membership-application submission, and invitation lookup/accept.
+Keyed by IP, not by account, so it can't itself be weaponized to lock a real user out by hammering
+their email from a different address. Verified live: the 6th login attempt within a minute
+correctly got 429, ordinary authenticated traffic on unrelated endpoints was completely unaffected
+by the same burst, and the window correctly cleared after ~60s letting a real login through again.
+
+**Security headers**: a small middleware on the API adds `X-Content-Type-Options: nosniff`,
+`X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and a genuinely strict
+`Content-Security-Policy: default-src 'none'; frame-ancestors 'none'` — correct, not merely
+cautious, since this API only ever serves JSON plus one static image directory, never HTML a
+browser would execute script from. `UseHsts()` for non-Development environments. The frontend
+(`next.config.ts`) gets the first three headers too, but deliberately *no* CSP there: the app
+renders admin-supplied image URLs (listing photos, member logos, committee photos) from arbitrary
+hosts, and this environment has no way to verify a CSP against Next.js's own inline hydration
+payloads in an actual browser — shipping an unverified CSP risks silently breaking the site for a
+header that's advisory to begin with, when the real security boundary (RLS, permission checks) is
+server-side regardless. Documented as a deliberate choice, not an oversight.
+
+**No CORS policy was added — deliberately**, and this needed to be explicitly reasoned through
+rather than assumed: every browser-originated request in this architecture is already same-origin
+(Next.js Server Components call REAK.Api server-to-server, where CORS doesn't apply at all; the
+only browser-JS calls go to Next.js's own same-origin proxy routes, e.g. the collaboration
+file-download proxy from Stage 9). Registering a CORS policy would only widen the attack surface
+for zero real cross-origin caller to serve — ASP.NET Core's default of silently rejecting
+cross-origin browser requests when no policy exists *is* the secure choice for this shape of app.
+
+**Dependency and secrets audit**: `dotnet list package --vulnerable --include-transitive` and
+`npm audit` (including devDependencies) both came back completely clean — zero known
+vulnerabilities on either side. A repo-wide grep for hardcoded password/API-key/secret patterns
+found nothing real (only test fixtures' own `TestPass123!` placeholders). Found and fixed one
+genuine, if minor, compliance gap: spec §29 explicitly requires "an example config listing
+variable names only", and no `.env.example` existed anywhere despite both apps reading several
+environment variables (`REAK_JWT_KEY`, the optional bootstrap-admin pair, `REAK_API_URL`,
+`NEXT_PUBLIC_SITE_URL`, etc.) — added one for each project, names and defaults only, no values.
+
+**Deliberately not built**: account lockout after N failed attempts (rate limiting already
+mitigates brute force without the UX cost and added complexity of a lockout/unlock flow — a
+judgment call, not an oversight) and stricter password complexity rules (the existing 8-character
+minimum matches modern guidance, which favors length over forced complexity; spec never asks for
+more).
+
+**Verified end-to-end**, live: rate limiting triggering and clearing correctly, security headers
+present on every response including static-file ones (checked an actual listing image request),
+`/media` static serving unaffected by the new middleware ordering, both new audit categories
+(`LoginFailed`, `AuthorizationFailed`) producing correctly-attributed entries. Reran `rls_test.sql`
+twice — still 7/7 (no RLS touched this stage). `dotnet build` and `npm run build`/`lint` clean,
+`dotnet list package --vulnerable` and `npm audit` both zero findings.
+
+## Stages 14–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -943,4 +1013,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-17
-**Status**: Stages 1-12 complete. Stage 13 next.
+**Status**: Stages 1-13 complete. Stage 14 next.

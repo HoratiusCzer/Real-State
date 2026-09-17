@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
@@ -18,6 +19,7 @@ public class MembershipApplicationsController(IMembershipApplicationService appl
     /// membership_application_enabled feature flag (seeded off by default, spec §15).</summary>
     [HttpPost]
     [AllowAnonymous]
+    [EnableRateLimiting("auth")]
     public async Task<IActionResult> Submit(SubmitMembershipApplicationRequest request, CancellationToken ct)
     {
         var (success, error, application) = await applicationService.SubmitAsync(
