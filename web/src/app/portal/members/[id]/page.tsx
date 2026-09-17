@@ -1,15 +1,18 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { Globe, Mail, MapPin, Phone } from "lucide-react";
+import { Globe, Mail, MapPin, Phone, Handshake } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { memberEntitiesApi } from "@/lib/portal/api";
-import { Card, CardContent } from "@/components/ui/card";
+import { createCollaborationRequestAction } from "@/lib/collaboration/actions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/input";
+import { SubmitButton } from "@/components/auth/submit-button";
 
 export const metadata: Metadata = { title: "Member detail" };
 
 export default async function PortalMemberDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { accessToken } = await requireSession();
+  const { user, accessToken } = await requireSession();
   const result = await memberEntitiesApi.get(accessToken, id);
 
   if (!result.ok) {
@@ -61,6 +64,25 @@ export default async function PortalMemberDetailPage({ params }: { params: Promi
           ) : null}
         </CardContent>
       </Card>
+
+      {!user.memberships.some((m) => m.memberEntityId === id) && user.permissions.includes("collaboration.create") ? (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Handshake className="h-4 w-4" aria-hidden="true" /> Request collaboration
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Not tied to a specific match — a general introduction request that {entity.name} can accept to open a shared workspace (spec §13).
+            </p>
+            <form action={createCollaborationRequestAction.bind(null, id)} className="space-y-2">
+              <Textarea name="message" placeholder="Introduce yourself (optional)…" rows={2} />
+              <SubmitButton size="sm">Send request</SubmitButton>
+            </form>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

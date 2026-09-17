@@ -17,5 +17,5 @@ export const matchesApi = {
     apiGet<MatchSearchResponse>(`/api/matches${toQueryString(params)}`, accessToken),
   get: (accessToken: string, id: string) => apiGet<MatchDetail>(`/api/matches/${id}`, accessToken),
   recordAction: (accessToken: string, id: string, actionType: number, notes?: string) =>
-    apiPost<{ recorded: boolean; collaborationNote: string | null }>(`/api/matches/${id}/actions`, { actionType, notes }, accessToken),
+    apiPost<{ recorded: boolean; collaborationRequestId: string | null }>(`/api/matches/${id}/actions`, { actionType, notes }, accessToken),
 };

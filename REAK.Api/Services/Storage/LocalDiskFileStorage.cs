@@ -11,6 +11,7 @@ public class LocalDiskFileStorage : IFileStorage
         _publicUrlBase = configuration["Storage:PublicUrlBase"] ?? "/media";
         Directory.CreateDirectory(Path.Combine(_root, "listing-media"));
         Directory.CreateDirectory(Path.Combine(_root, "listing-documents"));
+        Directory.CreateDirectory(Path.Combine(_root, "collaboration-files"));
     }
 
     /// <summary>Shared with Program.cs, which needs the same "listing-media" subfolder path to

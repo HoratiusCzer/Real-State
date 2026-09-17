@@ -5,6 +5,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Matching;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Collaboration;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Controllers;
@@ -34,7 +35,7 @@ namespace REAK.Api.Controllers;
 [Route("api/matches")]
 [Authorize]
 [RequirePermission("matches.read")]
-public class MatchesController(ReakDbContext db, SessionContextOverride sessionContextOverride) : ControllerBase
+public class MatchesController(ReakDbContext db, SessionContextOverride sessionContextOverride, ICollaborationRequestService collaborationRequestService) : ControllerBase
 {
     [HttpGet]
     public async Task<IActionResult> Search(
@@ -150,22 +151,24 @@ public class MatchesController(ReakDbContext db, SessionContextOverride sessionC
             };
 
             await db.SaveChangesAsync(ct);
-
-            // RequestCollaboration is recorded here as an auditable member action (spec §12.1),
-            // but actually creating a CollaborationRequest/CollaborationWorkspace is Stage 9's
-            // job — no collaboration tables are touched yet.
-            return Ok(new
-            {
-                recorded = true,
-                collaborationNote = request.ActionType == MatchActionType.RequestCollaboration
-                    ? "Collaboration workflows (requests, workspaces, contact disclosure) are built in Stage 9. This action is recorded for now."
-                    : (string?)null,
-            });
         }
         finally
         {
             sessionContextOverride.IsSystemLevel = false;
         }
+
+        // RequestCollaboration also files the actual CollaborationRequest (spec §13, Flow D step
+        // 1) — kept outside the block above so CollaborationRequestService's own elevation isn't
+        // nested inside this controller's, since both share the same scoped SessionContextOverride
+        // instance and resetting it early would prematurely de-elevate the outer block.
+        Guid? collaborationRequestId = null;
+        if (request.ActionType == MatchActionType.RequestCollaboration)
+        {
+            var (op, requestId) = await collaborationRequestService.CreateFromMatchAsync(caller, id, request.Notes, ct);
+            if (op.Result == CollabOpResult.Success) collaborationRequestId = requestId;
+        }
+
+        return Ok(new { recorded = true, collaborationRequestId });
     }
 
     private static bool CanAccess(CallerContext caller, Match match) =>

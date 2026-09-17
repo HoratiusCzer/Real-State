@@ -571,7 +571,90 @@ demand, scoped one-sided) — fine at current scale; if REAK's catalog grows lar
 natural point to move to a background job queue, but that would be solving a problem that
 doesn't exist yet (no premature optimization).
 
-## Stages 9–16
+## Stage 9 — Collaboration (✅ complete)
+
+**Request lifecycle** (`CollaborationRequestService`, spec §2.4 Flow D / §13.1): a request can
+start from a `Match` (`CreateFromMatchAsync`) or be a standalone introduction to any active
+organization (`CreateToOrgAsync`). `CollaborationRequest` has no RLS of its own — it has no
+`CollaborationWorkspaceId` to hang a participant predicate off before a workspace exists — so
+every method does its own explicit from/to-org ownership check, the same pattern already used
+for `Notifications`/`MemberEntities`. Accept/decline/cancel are guarded by status (`Pending`
+only) and by which side is allowed to act (recipient accepts/declines, requester cancels).
+
+**Workspace creation is the one genuinely new piece of RLS-interaction design this stage
+needed**, and it was caught *before* writing any code, not after a failed test the way Stage 8's
+bugs were: `CollaborationWorkspaces`/`CollaborationParticipants` share a single predicate
+(`fn_CollaborationParticipantPredicate`, spec §13 — unlike listings/demands' split read/write
+predicates, "can read this workspace" and "can write into it" are the same audience here, any
+participant) whose block predicate requires the session's profile to already be a participant of
+the workspace being inserted into — impossible for the very first participant rows in the same
+transaction that creates the workspace. `AcceptAsync` elevates via the Stage 8-established
+`SessionContextOverride` for just that one bootstrap `SaveChangesAsync` (workspace + both
+participant rows + an opening `CollaborationActivity`), then immediately resets it — every later
+action in an existing workspace goes through as the caller's real, already-a-participant
+identity, RLS doing the actual enforcement with no elevation needed.
+
+**Workspace-scoped surface** (`CollaborationWorkspaceService`/`CollaborationsController`,
+spec §13.1): messages, private notes, tasks (open/done), viewings, files
+(local-disk "collaboration-files" container, authenticated download only — no static route,
+mirroring "listing-documents"), an append-only activity log, and contact disclosures. Every
+child table carries the same shared RLS predicate, so most reads are just an ordinary filtered
+query — a non-participant's query returns nothing, reported as a 404 (or an empty list for the
+sub-resource GETs), never a distinguishable 403. Writes that somehow reach RLS's block predicate
+anyway (stale JWT, etc.) are caught in `SaveGuardedAsync` and translated to a 403, the same
+"catch the block-predicate SqlException" pattern `ListingService` already established.
+
+**Contact disclosure is the actual point of this stage** (spec §13.2): accepting a request never
+discloses contact info by itself — `GrantContactDisclosureAsync` is a separate, explicit,
+revocable act, and only the organization that actually owns that side (looked up via the
+workspace's originating `Match` → `Listing`/`Demand`, under the same cross-tenant-read
+elevation Stage 8 established) can grant it. The `ContactDataType` enum has four values, but
+`RowLevelSecurity.sql`'s disclosure predicates (built in Stage 3) only ever check `DataType 1`
+(`ListingContact`) and `2` (`DemandContact`) — `Phone`/`Email` exist in the enum with no
+consuming predicate. `GrantContactDisclosureAsync` refuses those two rather than silently
+recording a grant that would have zero actual effect. **Granting a disclosure required zero new
+code in `ListingsController`/`DemandsController`** — their `GET .../contact` endpoints
+(built in Stage 6/7) already check for an unrevoked `CollaborationContactDisclosure` scoped via
+the match; this stage only had to start writing rows into a table those endpoints were already
+reading from. Revoking one re-hides the contact live — verified, not assumed.
+
+**Verified end-to-end** with two real organizations (Kathmandu Prime Properties / Pokhara
+Lakeside Realty) and a genuine 100%-scored match between them: request → accept → workspace
+bootstrap (participants correctly populated on both sides, contact disclosures correctly empty
+immediately after acceptance); a same-organization profile who was *not* one of the two
+participants correctly got 404 on the workspace and was correctly blocked (403, via the
+block-predicate path) from posting a message into it — participation in this model is
+per-profile, not per-organization, confirmed deliberately since it's a real, non-obvious
+authorization property future stages need to respect; granting a `ListingContact` disclosure
+correctly unlocked `GET /api/listings/{id}/contact` for the receiving org with the nulled
+placeholder becoming real data, and revoking it correctly re-hid it; granting `Phone`/`Email`
+correctly rejected with an explanation; only the granting org could revoke its own grant (the
+other side got 403); messages/notes/tasks/viewings/file upload-download-delete all worked from
+both sides and were correctly invisible to the non-participant; `MatchesController.RecordAction`'s
+`RequestCollaboration` branch now actually calls `CreateFromMatchAsync` instead of just logging
+a "Stage 9 will build this" placeholder note. Reran the full `rls_test.sql` suite — still 7/7, no
+regression (no RLS policies were touched this stage, only application code driving the
+already-built Stage 3 ones). `dotnet build` and `npm run build`/`lint` clean.
+
+**Frontend**: `/portal/collaborations` (pending/accepted requests with inline accept/decline/
+cancel, linking through to the workspace once accepted) and `/portal/collaborations/:id`
+(full workspace — participants, contact-disclosure grant/revoke, messages, notes, tasks,
+viewings, files, activity log), plus a "Request collaboration" standalone affordance on
+`/portal/members/:id` for introductions not tied to a match. Built against the same Server
+Actions + `revalidatePath` pattern as every other portal module (no new frontend architecture
+introduced). **Not visually verified in an actual browser this stage** — the Chrome browser
+extension wasn't connected in this environment (same gap noted since Stage 2); verification here
+is backend-authoritative (real HTTP calls against every endpoint) plus a clean TypeScript
+build/lint, not a substitute for eyes-on UI testing.
+
+**Known gaps for later stages**: `CreateFromMatchAsync` doesn't check for an already-accepted
+request on the same match before creating a new pending one — a second "Request collaboration"
+click on an already-collaborating match creates a second, redundant request rather than pointing
+back at the existing workspace. Low-impact (no security or data-integrity issue, just UI
+tidiness) and left as-is rather than adding speculative guard logic for an edge case nobody hit
+in testing.
+
+## Stages 10–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -582,4 +665,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-17
-**Status**: Stages 1-8 complete. Stage 9 (Collaboration) next.
+**Status**: Stages 1-9 complete. Stage 10 next.
