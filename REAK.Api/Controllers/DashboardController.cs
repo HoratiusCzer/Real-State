@@ -100,4 +100,54 @@ public class DashboardController(ReakDbContext db, SessionContextOverride sessio
 
         return Ok(summary);
     }
+
+    /// <summary>Admin Portal dashboard (spec §4.3) — association-wide counts, not scoped to any one
+    /// organization, so every PropertyListings/Demands/Matches query here needs the same
+    /// cross-tenant elevation Summary's PotentialMatchesCount already uses.</summary>
+    [HttpGet("admin-summary")]
+    public async Task<IActionResult> AdminSummary(CancellationToken ct)
+    {
+        if (!User.HasClaim(ClaimsNames.IsSystemAdmin, "true")) return Forbid();
+
+        var pendingMembershipApplications = await db.MembershipApplications.CountAsync(a => a.Status == MembershipApplicationStatus.Pending, ct);
+        var totalActiveMembers = await db.MemberEntities.CountAsync(m => m.IsActive, ct);
+        var totalActiveUsers = await db.Profiles.CountAsync(p => p.IsActive, ct);
+        var pendingInvitations = await db.Invitations.CountAsync(i => i.Status == InvitationStatus.Pending, ct);
+
+        sessionContextOverride.IsSystemLevel = true;
+        int pendingModerationCount;
+        int pendingCollaborationRequests;
+        try
+        {
+            pendingModerationCount = await db.PropertyListings.CountAsync(l => l.Status == ListingStatus.PendingReview && !l.IsDeleted, ct);
+            pendingCollaborationRequests = await db.CollaborationRequests.CountAsync(r => r.Status == CollaborationRequestStatus.Pending, ct);
+        }
+        finally
+        {
+            sessionContextOverride.IsSystemLevel = false;
+        }
+
+        var cmsDraftCount =
+            await db.CmsPages.CountAsync(p => p.Status == ContentStatus.Draft || p.Status == ContentStatus.Review, ct) +
+            await db.NewsArticles.CountAsync(n => n.Status == ContentStatus.Draft || n.Status == ContentStatus.Review, ct) +
+            await db.Notices.CountAsync(n => n.Status == ContentStatus.Draft || n.Status == ContentStatus.Review, ct) +
+            await db.Events.CountAsync(e => e.Status == ContentStatus.Draft || e.Status == ContentStatus.Review, ct);
+        var cmsPublishedCount =
+            await db.CmsPages.CountAsync(p => p.Status == ContentStatus.Published, ct) +
+            await db.NewsArticles.CountAsync(n => n.Status == ContentStatus.Published, ct) +
+            await db.Notices.CountAsync(n => n.Status == ContentStatus.Published, ct) +
+            await db.Events.CountAsync(e => e.Status == ContentStatus.Published, ct);
+
+        return Ok(new
+        {
+            pendingMembershipApplications,
+            totalActiveMembers,
+            totalActiveUsers,
+            pendingInvitations,
+            pendingModerationCount,
+            pendingCollaborationRequests,
+            cmsDraftCount,
+            cmsPublishedCount,
+        });
+    }
 }

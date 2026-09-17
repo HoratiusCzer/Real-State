@@ -1,20 +1,28 @@
 import type { Metadata } from "next";
-import { CalendarDays } from "lucide-react";
-import { PagePlaceholder } from "@/components/marketing/page-placeholder";
+import { notFound } from "next/navigation";
+import { publicContentApi } from "@/lib/public-content/api";
 
-export const metadata: Metadata = { title: "Event" };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await publicContentApi.getEvent(slug);
+  return { title: result.ok ? result.data.title : "Event" };
+}
 
-export default async function EventPage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  await params;
+export default async function EventPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const result = await publicContentApi.getEvent(slug);
+  if (!result.ok) notFound();
+  const evt = result.data;
+
   return (
-    <PagePlaceholder
-      icon={CalendarDays}
-      title="Event"
-      description="This event will appear here once the CMS is built and content is published."
-    />
+    <article className="mx-auto max-w-3xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
+      <div>
+        <h1 className="font-heading text-3xl font-bold text-foreground">{evt.title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {evt.eventDate ? new Date(evt.eventDate).toLocaleString() : "Date TBA"}{evt.location ? ` · ${evt.location}` : ""}
+        </p>
+      </div>
+      {evt.body ? <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{evt.body}</div> : null}
+    </article>
   );
 }

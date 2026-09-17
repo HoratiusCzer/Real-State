@@ -2,6 +2,8 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Services.Auth;
 using REAK.Api.Services.Security;
@@ -10,11 +12,28 @@ namespace REAK.Api.Controllers;
 
 [ApiController]
 [Route("api/invitations")]
-public class InvitationsController(IInvitationService invitationService) : ControllerBase
+public class InvitationsController(IInvitationService invitationService, ReakDbContext db) : ControllerBase
 {
-    /// <summary>Admin-only — creates and emails an invitation (spec §2.4 Flow A step 3). Full
-    /// invitation management (listing, filtering, resending) belongs to the Admin Portal, Stage 11;
-    /// this is the minimal endpoint needed to actually exercise the flow end-to-end now.</summary>
+    /// <summary>Admin Portal invitation queue (Stage 11) — everyone who was ever invited, newest
+    /// first, so an admin can see what's pending/accepted/expired/revoked without hunting through
+    /// individual member org pages.</summary>
+    [HttpGet]
+    [Authorize]
+    [RequirePermission("members.read")]
+    public async Task<IActionResult> List(CancellationToken ct)
+    {
+        var invitations = await db.Invitations
+            .OrderByDescending(i => i.CreatedAt)
+            .Select(i => new
+            {
+                i.Id, i.Email, i.Status, i.MemberEntityId, MemberEntityName = i.MemberEntity != null ? i.MemberEntity.Name : null,
+                RoleName = i.Role.Name, InvitedByName = i.InvitedByProfile.FullName, i.ExpiresAt, i.AcceptedAt, i.CreatedAt,
+            })
+            .ToListAsync(ct);
+        return Ok(invitations);
+    }
+
+    /// <summary>Admin-only — creates and emails an invitation (spec §2.4 Flow A step 3).</summary>
     [HttpPost]
     [Authorize]
     [RequirePermission("members.create")]

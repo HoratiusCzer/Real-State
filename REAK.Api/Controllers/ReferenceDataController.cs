@@ -13,14 +13,39 @@ namespace REAK.Api.Controllers;
 /// exhaustive list would be fabricated business data). Reads are anonymous (the public property
 /// search page needs these for its filter dropdowns too); writes require settings.manage.
 ///
-/// Only Create is implemented here — full manage (edit/disable/reorder) is Stage 11's Admin
-/// Portal job. This is the minimal slice Property Exchange (Stage 6) actually depends on: without
-/// it, nobody could ever create a listing at all, since PropertyTypeId/PurposeId/location are
-/// required, non-nullable columns.</summary>
+/// Only Create is implemented here — full manage (edit/disable/reorder) stays deferred past Stage
+/// 11 too: this is eleven flat/hierarchical tables (property types, subtypes, purposes, amenities,
+/// the five-level Nepal location hierarchy, area units, currencies) and none of them are things
+/// a REAK admin would realistically edit day-to-day once seeded — Nepal's administrative
+/// divisions in particular are fixed geography, not editorial content. Stage 11's Admin Portal
+/// gives this an explicit "manage via API for now" placeholder rather than eleven near-identical
+/// CRUD screens; Roles below is the one addition, since it's needed both for oversight and for the
+/// invitation-creation role picker.</summary>
 [ApiController]
 [Route("api/reference")]
 public class ReferenceDataController(ReakDbContext db) : ControllerBase
 {
+    /// <summary>Read-only (spec §4.3 lists "roles, permissions" as an Admin Portal screen, but
+    /// actually editing the RBAC matrix is security-sensitive enough to defer deliberately — this
+    /// gives admins visibility into what's granted, and gives the invitation UI a role picker,
+    /// without a write path that could let someone grant themselves more access.</summary>
+    [HttpGet("roles")]
+    [Authorize]
+    [RequirePermission("members.read")]
+    public async Task<IActionResult> ListRoles(CancellationToken ct)
+    {
+        var roles = await db.Roles
+            .OrderBy(r => r.Scope).ThenBy(r => r.Name)
+            .Select(r => new
+            {
+                r.Id, r.Name, Scope = r.Scope.ToString(),
+                Permissions = r.RolePermissions.Select(rp => rp.Permission.Slug).ToList(),
+            })
+            .ToListAsync(ct);
+        foreach (var role in roles) role.Permissions.Sort();
+        return Ok(roles);
+    }
+
     [HttpGet("property-types")]
     [AllowAnonymous]
     public async Task<IActionResult> ListPropertyTypes(CancellationToken ct)

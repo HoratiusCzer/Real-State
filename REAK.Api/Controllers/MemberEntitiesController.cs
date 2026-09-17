@@ -19,14 +19,19 @@ namespace REAK.Api.Controllers;
 [Authorize]
 public class MemberEntitiesController(ReakDbContext db) : ControllerBase
 {
+    /// <summary>includeInactive is silently ignored for anyone but a system admin — the ordinary
+    /// member directory (spec §4.2) must never leak a suspended org's existence to other members;
+    /// only the Admin Portal's own members screen (Stage 11) needs to see it in order to reactivate
+    /// it.</summary>
     [HttpGet]
     [RequirePermission("members.read")]
-    public async Task<IActionResult> List(CancellationToken ct)
+    public async Task<IActionResult> List([FromQuery] bool includeInactive, CancellationToken ct)
     {
+        var showInactive = includeInactive && User.HasClaim(ClaimsNames.IsSystemAdmin, "true");
         var entities = await db.MemberEntities
-            .Where(m => m.IsActive)
+            .Where(m => showInactive || m.IsActive)
             .OrderBy(m => m.Name)
-            .Select(m => new { m.Id, m.Name, m.Description, m.Website, m.LogoUrl, m.CreatedAt })
+            .Select(m => new { m.Id, m.Name, m.Description, m.Website, m.LogoUrl, m.IsActive, m.CreatedAt })
             .ToListAsync(ct);
 
         return Ok(entities);
@@ -79,6 +84,38 @@ public class MemberEntitiesController(ReakDbContext db) : ControllerBase
         entity.Phone = request.Phone;
         entity.Email = request.Email;
         entity.Address = request.Address;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    /// <summary>Admin-only (system-level) — unlike Update, a MemberAdmin must never be able to
+    /// suspend their own organization. Suspending an org is a blunter instrument than suspending
+    /// individual profiles (ProfilesController): it hides the org from the directory but
+    /// deliberately does not touch its members' own IsActive — the two are separate levers.</summary>
+    [HttpPost("{id:guid}/suspend")]
+    [RequirePermission("members.suspend")]
+    public async Task<IActionResult> Suspend(Guid id, CancellationToken ct)
+    {
+        if (!User.HasClaim(ClaimsNames.IsSystemAdmin, "true")) return Forbid();
+
+        var entity = await db.MemberEntities.FirstOrDefaultAsync(m => m.Id == id, ct);
+        if (entity is null) return NotFound();
+
+        entity.IsActive = false;
+        await db.SaveChangesAsync(ct);
+        return NoContent();
+    }
+
+    [HttpPost("{id:guid}/reactivate")]
+    [RequirePermission("members.suspend")]
+    public async Task<IActionResult> Reactivate(Guid id, CancellationToken ct)
+    {
+        if (!User.HasClaim(ClaimsNames.IsSystemAdmin, "true")) return Forbid();
+
+        var entity = await db.MemberEntities.FirstOrDefaultAsync(m => m.Id == id, ct);
+        if (entity is null) return NotFound();
+
+        entity.IsActive = true;
         await db.SaveChangesAsync(ct);
         return NoContent();
     }

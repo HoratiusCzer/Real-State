@@ -14,6 +14,31 @@ namespace REAK.Api.Controllers;
 [Authorize]
 public class ProfilesController(ReakDbContext db) : ControllerBase
 {
+    /// <summary>Admin Portal "users" list (Stage 11, spec §4.3) — every profile, regardless of
+    /// which org(s) it belongs to or none at all, so an admin can find and suspend anyone.</summary>
+    [HttpGet]
+    [RequirePermission("members.read")]
+    public async Task<IActionResult> List([FromQuery] string? search, CancellationToken ct)
+    {
+        var query = db.Profiles.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            query = query.Where(p => p.Email.Contains(search) || p.FullName.Contains(search));
+        }
+
+        var profiles = await query
+            .OrderBy(p => p.FullName)
+            .Select(p => new
+            {
+                p.Id, p.Email, p.FullName, p.Phone, p.IsActive, p.LastLoginAt, p.CreatedAt,
+                Memberships = p.EntityMemberships.Where(m => m.IsActive).Select(m => m.MemberEntity.Name),
+                Roles = p.RoleAssignments.Select(r => r.Role.Name),
+            })
+            .ToListAsync(ct);
+
+        return Ok(profiles);
+    }
+
     /// <summary>Self-service profile edit — no permission slug needed, every authenticated profile
     /// may edit its own name/phone. Email is deliberately not editable here (it's the login
     /// identifier and unique-indexed; changing it needs its own verification flow, out of scope for

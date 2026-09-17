@@ -1,15 +1,16 @@
 import type { Metadata } from "next";
 import { Scale } from "lucide-react";
-import { PagePlaceholder } from "@/components/marketing/page-placeholder";
+import { CmsPageContent } from "@/components/marketing/cms-page-content";
 
 export const metadata: Metadata = { title: "Privacy policy" };
 
 export default function PrivacyPage() {
   return (
-    <PagePlaceholder
+    <CmsPageContent
+      slug="privacy"
       icon={Scale}
-      title="Privacy policy"
-      description="REAK's privacy policy will appear here once the association publishes it through the Admin CMS. Legal text is not invented in the meantime."
+      fallbackTitle="Privacy policy"
+      fallbackDescription="REAK's privacy policy will appear here once the association publishes it through the Admin CMS. Legal text is not invented in the meantime."
     />
   );
 }

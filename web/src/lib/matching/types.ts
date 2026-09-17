@@ -40,6 +40,9 @@ export const MATCH_RESULT_LABELS: Record<number, string> = {
 export type MatchComponent = { criterion: number; result: number; numericDelta: number | null; detailText: string | null };
 export type MatchAction = { id: string; actionType: number; notes: string | null; createdAt: string; byProfileName: string };
 
+export type MatchRule = { id: string; criterion: number; weight: number; isRequired: boolean; toleranceValue: number | null; sortOrder: number };
+export type MatchRuleSet = { id: string; name: string; version: number; status: string; description: string | null; createdAt: string; publishedAt: string | null; rules: MatchRule[] };
+
 export type MatchDetail = {
   id: string;
   listingId: string;

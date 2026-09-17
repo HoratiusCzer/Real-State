@@ -1,20 +1,28 @@
 import type { Metadata } from "next";
-import { Newspaper } from "lucide-react";
-import { PagePlaceholder } from "@/components/marketing/page-placeholder";
+import { notFound } from "next/navigation";
+import { publicContentApi } from "@/lib/public-content/api";
 
-export const metadata: Metadata = { title: "News article" };
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await publicContentApi.getNews(slug);
+  return { title: result.ok ? result.data.title : "News article" };
+}
 
-export default async function NewsArticlePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
-  await params;
+export default async function NewsArticlePage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const result = await publicContentApi.getNews(slug);
+  if (!result.ok) notFound();
+  const article = result.data;
+
   return (
-    <PagePlaceholder
-      icon={Newspaper}
-      title="News article"
-      description="This article will appear here once the CMS is built and content is published."
-    />
+    <article className="mx-auto max-w-3xl space-y-6 px-4 py-16 sm:px-6 lg:px-8">
+      <div>
+        <h1 className="font-heading text-3xl font-bold text-foreground">{article.title}</h1>
+        <p className="mt-2 text-sm text-muted-foreground">
+          {article.authorName} · {new Date(article.publishedAt).toLocaleDateString()}
+        </p>
+      </div>
+      {article.body ? <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground">{article.body}</div> : null}
+    </article>
   );
 }

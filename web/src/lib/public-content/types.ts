@@ -1,0 +1,9 @@
+export type PublicPage = { slug: string; title: string; body: string | null; seoTitle: string | null; seoDescription: string | null; ogImageUrl: string | null; publishedAt: string };
+export type PublicNewsSummary = { slug: string; title: string; summary: string | null; publishedAt: string };
+export type PublicNewsDetail = { slug: string; title: string; summary: string | null; body: string | null; publishedAt: string; authorName: string };
+export type PublicNoticeSummary = { slug: string; title: string; publishedAt: string };
+export type PublicNoticeDetail = { slug: string; title: string; body: string | null; publishedAt: string };
+export type PublicEventSummary = { slug: string; title: string; eventDate: string | null; location: string | null };
+export type PublicEventDetail = { slug: string; title: string; body: string | null; eventDate: string | null; location: string | null; publishedAt: string };
+export type PublicResource = { id: string; title: string; description: string | null; linkUrl: string | null };
+export type PublicCommitteeMember = { name: string; title: string; photoUrl: string | null };

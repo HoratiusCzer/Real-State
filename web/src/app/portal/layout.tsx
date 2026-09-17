@@ -32,6 +32,11 @@ export default async function PortalLayout({ children }: { children: React.React
               <p className="font-medium text-foreground">{user.profile.fullName}</p>
               <p className="text-muted-foreground">{orgName ?? user.profile.email}</p>
             </div>
+            {user.isSystemAdmin ? (
+              <Button href="/admin" variant="ghost" size="sm">
+                Admin Portal
+              </Button>
+            ) : null}
             <form action={logoutAction}>
               <Button type="submit" variant="secondary" size="sm">
                 Log out

@@ -25,7 +25,7 @@ in the Production Development Prompt.
 8. ✅ Matching engine — **complete 2026-09-17**
 9. ✅ Collaboration — **complete 2026-09-17**
 10. ✅ Notifications — **complete 2026-09-17**
-11. ⏸️ Admin + CMS
+11. ✅ Admin + CMS — **complete 2026-09-17**
 12. ⏸️ Feature flags + reports + audit
 13. ⏸️ Security hardening
 14. ⏸️ Performance + accessibility + responsive QA
@@ -733,7 +733,115 @@ in-app notifications with unread/read state, which is what's built; the `sms_not
 `whatsapp_notifications`/`email_notifications` feature flags exist in the schema but genuinely
 sending through any of those channels is out of this stage's scope.
 
-## Stages 11–16
+## Stage 11 — Admin + CMS (✅ complete)
+
+**Scope decision, stated up front rather than discovered mid-build**: spec §4.3's Admin Portal
+list is enormous — dashboard, members, users, invitations, roles, permissions, membership
+applications, properties, demands, matches, match rules, collaborations, property types,
+amenities, locations, units, currencies, committee, pages, news, notices, events, resources,
+media, notifications, feature flags, reports, audit logs, settings, security — and the spec's
+own stage order (§2.6) already splits feature flags/reports/audit into Stage 12. Within what's
+left, this stage built: the actual CMS (the stage's namesake — content types, lifecycle, public
+consumption), the Admin Portal shell, and every screen the codebase had an explicit `// Stage 11`
+breadcrumb for (seven of them, across `InvitationsController`, `MatchRuleSetsController`,
+`MemberEntitiesController`, `MembershipApplicationsController`, `ReferenceDataController`,
+`DatabaseSeeder`, and the public news placeholder — grepped for and closed one by one).
+Deliberately NOT built, and documented rather than silently skipped: full CRUD/edit/reorder for
+the eleven reference-data tables (mostly fixed taxonomy/geography, not day-to-day editorial
+content — a "Reference Data" placeholder explains this and points at the existing Create-only
+API), RBAC editing (a read-only Roles & Permissions view instead — editing the grant matrix live
+is security-sensitive enough to defer deliberately), and a Security screen (spec names it without
+specifying contents beyond what Stages 3-4 already built and tested).
+
+**CMS backend** (`CmsController`, `cms.manage`): `CmsPage`/`NewsArticle`/`Notice`/`Event`/
+`Resource` all move through the same Draft → Review → Published → Archived lifecycle (Flow E,
+spec §4.3) via one shared `AllowedTransitions` map and a single `PATCH .../status` endpoint per
+type, rather than three separate submit/publish/archive actions each — collapses what would have
+been ~40 near-identical endpoints into 8 per type. Publishing is deliberately not reachable
+directly from Draft (must pass through Review) — an admin can still do it in two quick calls, but
+never skip review by construction. `CommitteeMember`/`NavigationItem` are simpler (`IsActive`
+toggle, no editorial review needed for a roster entry or a nav link); `SiteSetting` is a plain
+upsert-by-key, effective immediately, same shape as `FeatureFlags`. None of these tables carry
+RLS — they're association-wide editorial content, not per-org private data — so the permission
+check is the only gate.
+
+**Public consumption** (`PublicContentController`, anonymous, spec §16's "sanitized public
+projection" pattern applied to CMS for the first time): every method filters to
+`Status == Published` and hand-picks its field allowlist, mirroring `PublicPropertiesController`'s
+discipline exactly. This is what actually finishes the job — `/news`, `/notices`, `/events`,
+`/resources`, `/leadership`, `/about`, `/privacy`, `/terms`, and the homepage's three content
+feeds had all been placeholder stubs literally since Stage 2, each one saying "once published
+from the Admin CMS." A shared `CmsPageContent` component now renders any `CmsPage` by slug
+(about/privacy/terms all reuse it) with the exact same placeholder as its fallback when nothing's
+published yet — the empty state was never thrown away, just given a real alternative.
+
+**Closing the seven `// Stage 11` breadcrumbs**: `MembershipApplicationsController`'s existing
+review queue, `MatchRuleSetsController`'s existing rule-set CRUD/publish, and
+`InvitationsController`'s existing create/revoke all already had complete backends from Stages
+4/8 with comments saying "full admin UI is Stage 11" — this stage was mostly just building the
+UI against them. Three small backend additions were still genuinely new: `GET /api/invitations`
+(a list endpoint never existed), `GET /api/profiles` (an admin "users" list, reusing the
+suspend/reactivate endpoints Stage 4 already built for `ActiveProfileMiddleware`), and
+`POST /api/member-entities/{id}/suspend`/`reactivate` (org-level suspension — a separate lever
+from suspending an org's individual users, verified live to not cross-affect each other). Also
+added `GET /api/reference/roles` (read-only, for both the Roles view and the invitation form's
+role picker) and `GET /api/dashboard/admin-summary` (association-wide counts, using the same
+`SessionContextOverride` elevation `DashboardController.Summary`'s `PotentialMatchesCount`
+already established for cross-tenant reads). Property moderation needed no new backend at all —
+`GET /api/listings?status=PendingReview` as a system admin already returns every org's pending
+listings, because RLS's own `is_system_admin=1` bypass branch (built in Stage 3) does the
+cross-tenant read for free; same for the Collaborations oversight page, which just gives
+`CollaborationRequestService.ListMineAsync`'s existing "system admin sees everything" branch
+somewhere to be seen. The admin/member-portal split runs on the same `isSystemAdmin` claim
+throughout — set once by `IUserClaimsFactory` in Stage 4, never re-derived.
+
+**One real bug, caught live rather than by inspection**: the read-only roles endpoint's first
+version threw a 500 — `EF Core` refused to translate `.Select(...).OrderBy(...)` inside a nested
+collection projection ("Collections in the final projection must be an IEnumerable&lt;T&gt;...").
+Fixed by materializing with `.ToList()` inside the query and sorting in memory afterward.
+
+**Closed a gap Stage 10 explicitly deferred**: "association notices" was the one notification
+trigger (of spec §14's nine) left unwired last stage, because nothing could publish a `Notice`
+yet. `SetNoticeStatus` now broadcasts to every active profile (an `AssociationNotice` is
+association-wide by definition, not org-scoped) the instant a notice transitions into
+`Published` — guarded by a `wasPublished` check so re-saving an already-published notice, or
+archiving one, never re-fires it. Verified live: publishing notified every active test profile
+immediately (unread count incremented, correct deep link to `/notices/{slug}`), and archiving
+the same notice afterward correctly did not notify again.
+
+**Verified end-to-end**, live, after every piece: a full CmsPage Draft→Review→Published→Archived→
+Draft cycle, confirming the public endpoint 404s except while genuinely Published; the identical
+cycle for a news article, including its public list/detail read; a listing's full moderation
+queue flow (toggle `property_moderation_required` on, submit, appear in the admin queue exactly
+once, approve, queue empties, flag restored to its original off value afterward); org suspension
+correctly hiding an org from the ordinary member directory while leaving its users' own sessions
+untouched, and a `MemberAdmin` correctly forbidden from suspending orgs at all (403); the
+invitation list, membership-application approve/reject, and roles endpoints all against real data;
+the homepage's three content feeds and every public content page (`/news`, `/notices`, `/events`,
+`/resources`, `/leadership`, `/about`) rendering real published content by the end, with the
+empty-state fallback independently re-confirmed for unpublished/draft content along the way.
+Reran `rls_test.sql` twice — still 7/7 (no RLS SQL touched this stage; every CMS/admin table is
+deliberately RLS-free, permission checks are the only gate). `dotnet build` and
+`npm run build`/`lint` both clean on the first full pass after the roles-query fix.
+
+**Frontend**: a new `/admin/*` route group with its own layout (`isSystemAdmin`-gated — UX only,
+every backend endpoint enforces its own permission independently), a sectioned sidebar nav
+matching spec §4.3's full list including the deferred items, a database-backed dashboard, and 22
+routes total: 8 CMS screens, 6 screens closing the explicit gaps above, and 5 documented
+placeholders. Reciprocal "Admin Portal" / "Member Portal" links added to each layout's header for
+a system admin. **Not visually verified in a browser** — the Chrome extension still isn't
+connected in this environment; verified instead via real HTTP calls against every backend
+endpoint plus confirming every new frontend route (public and admin) returns the correct
+status/content over HTTP rather than a server-render crash.
+
+**Known gaps carried forward, all deliberate and documented above rather than silent**:
+reference-data edit/reorder UI, RBAC editing UI, and a Security screen. Feature flags, reports,
+and audit logs remain placeholder-only pending Stage 12 per the spec's own stage split — audit
+logging in particular still has no write path at all (`AuditLogs`' RLS and its append-only
+trigger were built and tested in Stage 3, but nothing calls into it yet, a gap first noted back
+in Stage 7).
+
+## Stages 12–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -744,4 +852,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-17
-**Status**: Stages 1-10 complete. Stage 11 next.
+**Status**: Stages 1-11 complete. Stage 12 next.
