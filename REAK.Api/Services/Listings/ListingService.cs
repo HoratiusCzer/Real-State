@@ -5,6 +5,7 @@ using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Enums;
 using REAK.Api.Services.Matching;
+using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
 
@@ -20,7 +21,7 @@ namespace REAK.Api.Services.Listings;
 /// that could newly qualify a listing for matching or change data that affects an existing
 /// match's score — the engine itself no-ops when the listing isn't Approved or no rule set is
 /// published, so it's safe to call unconditionally rather than duplicating that logic here.</summary>
-public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine) : IListingService
+public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine, INotificationService notificationService) : IListingService
 {
     public async Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, CallerContext? caller, CancellationToken ct = default)
     {
@@ -262,7 +263,12 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.ApprovedAt = DateTime.UtcNow;
         listing.RejectionReason = null;
 
-        return await SaveGuardedAndRecomputeAsync(id, ct);
+        var op = await SaveGuardedAndRecomputeAsync(id, ct);
+        if (op.Result == ListingOpResult.Success)
+        {
+            await notificationService.NotifyAsync(listing.CreatedByProfileId, NotificationType.ListingApproved, $"\"{listing.Title}\" was approved", null, $"/portal/properties/{id}", ct);
+        }
+        return op;
     }
 
     public async Task<ListingOp> RejectAsync(Guid id, CallerContext caller, string reason, CancellationToken ct = default)
@@ -279,7 +285,12 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.ApprovedByProfileId = caller.ProfileId;
         listing.ApprovedAt = null;
 
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == ListingOpResult.Success)
+        {
+            await notificationService.NotifyAsync(listing.CreatedByProfileId, NotificationType.ListingRejected, $"\"{listing.Title}\" was rejected", reason, $"/portal/properties/{id}", ct);
+        }
+        return op;
     }
 
     public async Task<ListingOp> ArchiveAsync(Guid id, CallerContext caller, CancellationToken ct = default)

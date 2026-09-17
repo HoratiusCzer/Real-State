@@ -52,6 +52,7 @@ export const memberEntitiesApi = {
 
 export const notificationsApi = {
   list: (accessToken: string) => apiGet<NotificationItem[]>("/api/notifications", accessToken),
+  unreadCount: (accessToken: string) => apiGet<{ count: number }>("/api/notifications/unread-count", accessToken),
   markRead: (accessToken: string, id: string) => apiPost<void>(`/api/notifications/${id}/read`, undefined, accessToken),
   markAllRead: (accessToken: string) => apiPost<void>("/api/notifications/read-all", undefined, accessToken),
 };

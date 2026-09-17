@@ -6,4 +6,5 @@ public enum DemandStatus
     Active = 2,
     Fulfilled = 3,
     Archived = 4,
+    Expired = 5,
 }

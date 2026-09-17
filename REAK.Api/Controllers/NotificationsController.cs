@@ -29,6 +29,14 @@ public class NotificationsController(ReakDbContext db) : ControllerBase
         return Ok(notifications);
     }
 
+    [HttpGet("unread-count")]
+    public async Task<IActionResult> UnreadCount(CancellationToken ct)
+    {
+        var profileId = GetProfileId();
+        var count = await db.Notifications.CountAsync(n => n.ProfileId == profileId && !n.IsRead, ct);
+        return Ok(new { count });
+    }
+
     [HttpPost("{id:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid id, CancellationToken ct)
     {

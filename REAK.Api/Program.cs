@@ -46,6 +46,8 @@ builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationS
 // No email provider is configured for this project yet — logs instead of delivering. Swap for a
 // real provider (SendGrid/SES/SMTP) here before production (spec §34).
 builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddHostedService<ExpiryScanService>();
 
 builder.Services.AddScoped<IReferenceCodeGenerator, ReferenceCodeGenerator>();
 builder.Services.AddScoped<IMatchingEngine, MatchingEngine>();

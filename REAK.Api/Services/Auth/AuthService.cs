@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Entities.Identity;
+using REAK.Api.Models.Enums;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
@@ -14,7 +15,8 @@ public class AuthService(
     IPasswordHasher passwordHasher,
     IJwtTokenService tokenService,
     IUserClaimsFactory claimsFactory,
-    IEmailSender emailSender) : IAuthService
+    IEmailSender emailSender,
+    INotificationService notificationService) : IAuthService
 {
     private const int MinPasswordLength = 8;
 
@@ -81,6 +83,9 @@ public class AuthService(
         profile.PasswordHash = passwordHasher.Hash(newPassword);
         await RevokeAllRefreshTokensAsync(profileId, ct);
         await db.SaveChangesAsync(ct);
+
+        await notificationService.NotifyAsync(profileId, NotificationType.AccountEvent, "Your password was changed", null, "/portal/settings", ct);
+
         return true;
     }
 
@@ -132,6 +137,9 @@ public class AuthService(
         resetToken.UsedAt = DateTime.UtcNow;
         await RevokeAllRefreshTokensAsync(resetToken.ProfileId, ct);
         await db.SaveChangesAsync(ct);
+
+        await notificationService.NotifyAsync(resetToken.ProfileId, NotificationType.AccountEvent, "Your password was reset", null, "/portal/settings", ct);
+
         return true;
     }
 

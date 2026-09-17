@@ -23,8 +23,8 @@ in the Production Development Prompt.
 6. ✅ Property Exchange — **complete 2026-09-16**
 7. ✅ Demand/Requirement system — **complete 2026-09-16**
 8. ✅ Matching engine — **complete 2026-09-17**
-9. ⏳ Collaboration — **next**
-10. ⏸️ Notifications
+9. ✅ Collaboration — **complete 2026-09-17**
+10. ✅ Notifications — **complete 2026-09-17**
 11. ⏸️ Admin + CMS
 12. ⏸️ Feature flags + reports + audit
 13. ⏸️ Security hardening
@@ -654,7 +654,86 @@ back at the existing workspace. Low-impact (no security or data-integrity issue,
 tidiness) and left as-is rather than adding speculative guard logic for an edge case nobody hit
 in testing.
 
-## Stages 10–16
+## Stage 10 — Notifications (✅ complete)
+
+**The scaffolding already existed** (Stage 3's schema, a `Notification` entity with exactly the
+right shape, and `NotificationsController`'s list/mark-read/mark-all-read, even the frontend
+`/portal/notifications` page) — nothing ever actually wrote a row. `NotificationEnums.cs`'s
+`NotificationType` already enumerated all nine of spec §14's triggers, which made scope
+unambiguous: wire creation at each real event, not invent a new design.
+
+**`INotificationService`/`NotificationService`** (`Services/Notifications`, deliberately parallel
+to `IEmailSender` — a small, self-contained, fire-and-forget write, never a transactional
+participant in the caller's own `SaveChangesAsync`): `NotifyAsync` (one profile), `NotifyManyAsync`
+(several), `NotifyOrgAsync` (every active user of a member organization, via `EntityUsers`). Every
+call site fires only *after* its own triggering change is already committed, so a notification
+failure can never roll back the business action that caused it.
+
+**Wired into eight of the nine triggers**:
+- **Match** — `MatchingEngine.UpsertMatchAsync`, only on a genuinely *new* `Match` row (tracked via
+  an `isNewMatch` flag), never on a recompute that just refreshes an existing match's score —
+  otherwise editing a listing would spam both orgs on every save.
+- **Collaboration request / accepted / declined** — `CollaborationRequestService`'s
+  `CreateFromMatchAsync`/`CreateToOrgAsync` (notify the recipient org), `AcceptAsync`/
+  `DeclineAsync` (notify the requester). `Cancel` deliberately doesn't notify — the recipient may
+  never have seen the request to begin with.
+- **Message** — `CollaborationWorkspaceService.SendMessageAsync`, notifying every *other*
+  participant. Reading who else is in the workspace needs no RLS elevation: the insert that just
+  succeeded already proved the caller is a participant, and "any participant sees every row of
+  their own workspace" is the whole point of the shared predicate.
+- **Listing approval / rejection** — `ListingService.ApproveAsync`/`RejectAsync`, notifying
+  `CreatedByProfileId`.
+- **Invitation** — `InvitationService.AcceptAsync`, notifying `InvitedByProfileId` — the invitee
+  has no profile (and thus nothing to notify) until this exact moment, so this is the only
+  invitation-related instant an in-app notification could ever fire from.
+- **Account event** — `AuthService.ChangePasswordAsync` and `ResetPasswordAsync`, both notifying
+  the account itself ("Your password was changed/reset") as a security-awareness signal.
+- **Expiry** — new `ExpiryScanService : BackgroundService` (`Services/Notifications`), the one
+  trigger with no HTTP request to hang off. Runs hourly (and immediately on startup), scans
+  `PropertyListings`/`Demands` past `ExpiresAt` that are still `Approved`/`Active`, transitions
+  them to `Expired`, and notifies `CreatedByProfileId`. `ListingStatus.Expired` already existed in
+  the enum but nothing had ever used it; `DemandStatus` had no `Expired` value at all despite
+  `Demand` already having an `ExpiresAt` column — added one (additive, no check constraint to
+  fight, no migration required) rather than silently reusing `Archived` for a semantically
+  different state. As a genuine background job with no ambient `HttpContext` for
+  `SessionContextConnectionInterceptor` to read, it owns its own DI scope per tick and elevates via
+  `SessionContextOverride` the same way `MatchingEngine` does — same spec §20 pattern, third time
+  now. An expired listing/demand needs no `Match` cleanup: `MatchesController.Search`'s live-view
+  filter already excludes anything not `Approved`/`Active`, exactly like `ArchiveAsync` never
+  touches `Matches` either.
+
+**Deliberately not wired**: **association notices**. `Notice` (CMS content) already exists as an
+entity but has no publish path yet — no controller lets anyone actually create or publish one
+(CMS management is Stage 11's job). Wiring a notification to an event that cannot yet occur would
+be exactly the kind of thing spec §22 warns against; documented as a Stage 11 follow-up instead of
+faked.
+
+**Frontend**: the existing notifications page needed only two additions — a clickable title when
+`linkUrl` is present, and an unread-count badge on the sidebar's "Notifications" item (fetched once
+in `portal/layout.tsx`, refreshed automatically whenever a mark-read/mark-all-read server action
+revalidates the route). No new pages; everything else already worked.
+
+**Verified end-to-end** with the same two real organizations: a workspace message correctly
+notified only the other participant, not the sender; a collaboration request/accept/decline cycle
+produced exactly the right notifications with working deep links; toggling
+`property_moderation_required` on temporarily (it defaults off in this dev DB) let both a listing
+rejection and a subsequent approval be tested for real, then the flag was restored; an invitation
+created and accepted notified the inviter; a password reset notified the account; backdating a
+listing's and a demand's `ExpiresAt` and restarting the API triggered the startup scan, which
+correctly expired both, notified both owning orgs, and dropped the pair out of
+`MatchesController`'s live match view — then both were restored to their prior state since they're
+the project's main demo fixture. `unread-count` correctly tracked every notification and correctly
+zeroed on mark-all-read. Reran `rls_test.sql` twice more (before and after the moderation-flag /
+expiry testing) — still 7/7, no regression (no RLS SQL touched this stage). `dotnet build` and
+`npm run build`/`lint` clean.
+
+**Known gaps for later stages**: association notices (documented above, blocked on Stage 11's CMS
+management). No push/SMS/WhatsApp/email delivery for these events — spec §14 only asks for
+in-app notifications with unread/read state, which is what's built; the `sms_notifications`/
+`whatsapp_notifications`/`email_notifications` feature flags exist in the schema but genuinely
+sending through any of those channels is out of this stage's scope.
+
+## Stages 11–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -665,4 +744,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-17
-**Status**: Stages 1-9 complete. Stage 10 next.
+**Status**: Stages 1-10 complete. Stage 11 next.

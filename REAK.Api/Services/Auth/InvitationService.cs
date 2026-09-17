@@ -10,7 +10,7 @@ namespace REAK.Api.Services.Auth;
 /// <summary>Flow A steps 3-5 (spec §2.4): admin creates an invitation, invitee accepts (setting a
 /// password if they're a brand-new profile), and an EntityUser row links them to their member
 /// organization with the granted role.</summary>
-public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender) : IInvitationService
+public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender, INotificationService notificationService) : IInvitationService
 {
     public async Task<Invitation> CreateAsync(string email, Guid? memberEntityId, Guid roleId, Guid invitedByProfileId, CancellationToken ct = default)
     {
@@ -148,6 +148,9 @@ public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher,
         invitation.AcceptedAt = DateTime.UtcNow;
 
         await db.SaveChangesAsync(ct);
+
+        await notificationService.NotifyAsync(invitation.InvitedByProfileId, NotificationType.Invitation, $"{invitation.Email} accepted your invitation", null, null, ct);
+
         return (true, null);
     }
 

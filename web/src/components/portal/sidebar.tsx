@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { portalNavItems } from "@/lib/portal-nav";
 
-export function PortalSidebar() {
+export function PortalSidebar({ unreadNotifications = 0 }: { unreadNotifications?: number }) {
   const pathname = usePathname();
 
   return (
@@ -26,7 +26,17 @@ export function PortalSidebar() {
             )}
           >
             <Icon className="h-4 w-4 shrink-0" aria-hidden="true" />
-            {item.label}
+            <span className="flex-1">{item.label}</span>
+            {item.href === "/portal/notifications" && unreadNotifications > 0 ? (
+              <span
+                className={cn(
+                  "inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-xs font-semibold",
+                  active ? "bg-on-accent/20 text-on-accent" : "bg-accent text-on-accent"
+                )}
+              >
+                {unreadNotifications > 99 ? "99+" : unreadNotifications}
+              </span>
+            ) : null}
           </Link>
         );
       })}

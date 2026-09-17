@@ -4,6 +4,7 @@ using REAK.Api.Models.Entities.Demands;
 using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Entities.Matching;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Services.Matching;
@@ -26,7 +27,7 @@ namespace REAK.Api.Services.Matching;
 /// same way a Postgres SECURITY DEFINER function would: explicitly, narrowly, only for this
 /// operation — set true at the start of a recompute and reset in a `finally`, so a request that
 /// does something else after recomputing doesn't stay elevated by accident.</summary>
-public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionContextOverride) : IMatchingEngine
+public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService) : IMatchingEngine
 {
     public async Task<int> RecomputeForListingAsync(Guid listingId, CancellationToken ct = default)
     {
@@ -141,6 +142,7 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
 
         var score = ComputeScore(ruleSet.Rules, components);
 
+        var isNewMatch = existing is null;
         if (existing is null)
         {
             existing = new Match
@@ -180,6 +182,16 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
         }
 
         await db.SaveChangesAsync(ct);
+
+        // Only a genuinely new pair is worth notifying about — a recompute that just refreshes an
+        // already-known match's score would otherwise notify both orgs on every listing/demand edit.
+        if (isNewMatch)
+        {
+            var linkUrl = $"/portal/matches/{existing.Id}";
+            await notificationService.NotifyOrgAsync(listing.MemberEntityId, NotificationType.Match, $"New match for \"{listing.Title}\"", $"Scored {score:0}% against a requirement.", linkUrl, ct);
+            await notificationService.NotifyOrgAsync(demand.MemberEntityId, NotificationType.Match, $"New match for \"{demand.Title}\"", $"Scored {score:0}% against a listing.", linkUrl, ct);
+        }
+
         return true;
     }
 

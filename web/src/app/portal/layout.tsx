@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { requireSession } from "@/lib/auth/session";
 import { logoutAction } from "@/lib/auth/actions";
+import { notificationsApi } from "@/lib/portal/api";
 import { PortalSidebar } from "@/components/portal/sidebar";
 import { Button } from "@/components/ui/button";
 
@@ -14,8 +15,10 @@ export const metadata: Metadata = { robots: { index: false } };
  * what this layer does (spec §2.5). Deliberately isolated from the (public) route group's
  * marketing chrome (Stage 2 decision). */
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
-  const { user } = await requireSession();
+  const { user, accessToken } = await requireSession();
   const orgName = user.memberships[0]?.memberEntityName;
+  const unreadResult = await notificationsApi.unreadCount(accessToken);
+  const unreadNotifications = unreadResult.ok ? unreadResult.data.count : 0;
 
   return (
     <div className="flex min-h-svh flex-col">
@@ -40,7 +43,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
       <div className="mx-auto flex w-full max-w-7xl flex-1 gap-8 px-4 py-8 sm:px-6 lg:px-8">
         <aside className="w-56 shrink-0">
-          <PortalSidebar />
+          <PortalSidebar unreadNotifications={unreadNotifications} />
         </aside>
         <main className="min-w-0 flex-1">{children}</main>
       </div>

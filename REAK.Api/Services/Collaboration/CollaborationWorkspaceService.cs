@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Collaboration;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Services.Collaboration;
@@ -16,7 +17,7 @@ namespace REAK.Api.Services.Collaboration;
 /// no rows for a non-participant means an empty list or a null result, not an error, which is
 /// exactly the fail-closed behavior we want. Writes are guarded the same way ListingService
 /// guards its writes: catch the RLS block-predicate SqlException and translate it to Forbidden.</summary>
-public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverride sessionContextOverride) : ICollaborationWorkspaceService
+public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService) : ICollaborationWorkspaceService
 {
     private record ListingDemandOrgs(Guid? ListingId, string? ListingTitle, Guid? ListingOrgId, Guid? DemandId, string? DemandTitle, Guid? DemandOrgId);
 
@@ -70,7 +71,22 @@ public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverr
     public async Task<CollabOp> SendMessageAsync(Guid workspaceId, CallerContext caller, string body, CancellationToken ct = default)
     {
         db.CollaborationMessages.Add(new CollaborationMessage { Id = Guid.NewGuid(), CollaborationWorkspaceId = workspaceId, SenderProfileId = caller.ProfileId, Body = body });
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result != CollabOpResult.Success) return op;
+
+        // RLS already proved the caller is a participant of this workspace (the insert above only
+        // succeeded because of that), so reading the other participant rows of the same workspace
+        // needs no elevation — "any participant can see every row of their own workspace" is the
+        // whole point of the shared predicate.
+        var otherProfileIds = await db.CollaborationParticipants
+            .Where(p => p.CollaborationWorkspaceId == workspaceId && p.ProfileId != caller.ProfileId)
+            .Select(p => p.ProfileId)
+            .ToListAsync(ct);
+        var senderName = await db.Profiles.Where(p => p.Id == caller.ProfileId).Select(p => p.FullName).FirstAsync(ct);
+        var preview = body.Length > 200 ? body[..200] + "…" : body;
+        await notificationService.NotifyManyAsync(otherProfileIds, NotificationType.Message, $"New message from {senderName}", preview, $"/portal/collaborations/{workspaceId}", ct);
+
+        return op;
     }
 
     public async Task<List<CollaborationNoteDto>> ListNotesAsync(Guid workspaceId, CancellationToken ct = default) =>

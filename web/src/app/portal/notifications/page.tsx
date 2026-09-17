@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { Bell } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { notificationsApi } from "@/lib/portal/api";
@@ -39,9 +40,18 @@ export default async function NotificationsPage() {
             <li key={n.id}>
               <Card className={cn("flex items-start justify-between gap-4 p-4", !n.isRead && "border-accent")}>
                 <div>
-                  <p className={cn("text-sm", n.isRead ? "text-foreground" : "font-semibold text-foreground")}>
-                    {n.title}
-                  </p>
+                  {n.linkUrl ? (
+                    <Link
+                      href={n.linkUrl}
+                      className={cn("text-sm hover:underline", n.isRead ? "text-foreground" : "font-semibold text-foreground")}
+                    >
+                      {n.title}
+                    </Link>
+                  ) : (
+                    <p className={cn("text-sm", n.isRead ? "text-foreground" : "font-semibold text-foreground")}>
+                      {n.title}
+                    </p>
+                  )}
                   {n.body ? <p className="mt-1 text-sm text-muted-foreground">{n.body}</p> : null}
                   <p className="mt-1 text-xs text-muted-foreground">{new Date(n.createdAt).toLocaleString()}</p>
                 </div>

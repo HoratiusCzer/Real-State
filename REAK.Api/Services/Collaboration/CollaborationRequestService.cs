@@ -3,6 +3,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Collaboration;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Services.Collaboration;
@@ -13,9 +14,9 @@ namespace REAK.Api.Services.Collaboration;
 /// §13.2). CollaborationRequest has no RLS of its own (it has no CollaborationWorkspaceId to hang
 /// a participant-predicate off before a workspace exists), so every method here does its own
 /// explicit from/to-org ownership check — same pattern as Notifications/MemberEntities.</summary>
-public class CollaborationRequestService(ReakDbContext db, SessionContextOverride sessionContextOverride) : ICollaborationRequestService
+public class CollaborationRequestService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService) : ICollaborationRequestService
 {
-    private record MatchOrgs(Guid ListingOrgId, Guid DemandOrgId);
+    private record MatchOrgs(Guid ListingOrgId, string ListingOrgName, Guid DemandOrgId, string DemandOrgName);
 
 
     public async Task<(CollabOp Op, Guid? RequestId)> CreateFromMatchAsync(CallerContext caller, Guid matchId, string? message, CancellationToken ct = default)
@@ -33,7 +34,7 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         try
         {
             matchOrgs = await db.Matches.Where(m => m.Id == matchId)
-                .Select(m => new MatchOrgs(m.Listing.MemberEntityId, m.Demand.MemberEntityId))
+                .Select(m => new MatchOrgs(m.Listing.MemberEntityId, m.Listing.MemberEntity.Name, m.Demand.MemberEntityId, m.Demand.MemberEntity.Name))
                 .FirstOrDefaultAsync(ct);
         }
         finally
@@ -47,14 +48,17 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         }
 
         Guid fromOrg, toOrg;
+        string fromOrgName;
         if (caller.MemberEntityIds.Contains(matchOrgs.ListingOrgId))
         {
             fromOrg = matchOrgs.ListingOrgId;
+            fromOrgName = matchOrgs.ListingOrgName;
             toOrg = matchOrgs.DemandOrgId;
         }
         else if (caller.MemberEntityIds.Contains(matchOrgs.DemandOrgId))
         {
             fromOrg = matchOrgs.DemandOrgId;
+            fromOrgName = matchOrgs.DemandOrgName;
             toOrg = matchOrgs.ListingOrgId;
         }
         else
@@ -80,6 +84,9 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         };
         db.CollaborationRequests.Add(request);
         await db.SaveChangesAsync(ct);
+
+        await notificationService.NotifyOrgAsync(toOrg, NotificationType.CollaborationRequest, $"{fromOrgName} requested to collaborate", message, "/portal/collaborations", ct);
+
         return (new CollabOp(CollabOpResult.Success), request.Id);
     }
 
@@ -112,6 +119,10 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         };
         db.CollaborationRequests.Add(request);
         await db.SaveChangesAsync(ct);
+
+        var fromOrgName = await db.MemberEntities.Where(m => m.Id == fromOrg).Select(m => m.Name).FirstAsync(ct);
+        await notificationService.NotifyOrgAsync(toMemberEntityId, NotificationType.CollaborationRequest, $"{fromOrgName} requested to collaborate", message, "/portal/collaborations", ct);
+
         return (new CollabOp(CollabOpResult.Success), request.Id);
     }
 
@@ -188,6 +199,8 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
             sessionContextOverride.IsSystemLevel = false;
         }
 
+        await notificationService.NotifyAsync(request.RequestedByProfileId, NotificationType.CollaborationAccepted, "Your collaboration request was accepted", null, $"/portal/collaborations/{workspace.Id}", ct);
+
         return (new CollabOp(CollabOpResult.Success), workspace.Id);
     }
 
@@ -208,6 +221,9 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         request.RespondedByProfileId = caller.ProfileId;
         request.RespondedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+
+        await notificationService.NotifyAsync(request.RequestedByProfileId, NotificationType.CollaborationDeclined, "Your collaboration request was declined", null, "/portal/collaborations", ct);
+
         return new CollabOp(CollabOpResult.Success);
     }
 
