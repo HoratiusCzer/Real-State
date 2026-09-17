@@ -7,6 +7,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Cms;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 using CmsEvent = REAK.Api.Models.Entities.Cms.Event;
@@ -23,7 +24,7 @@ namespace REAK.Api.Controllers;
 [Route("api/cms")]
 [Authorize]
 [RequirePermission("cms.manage")]
-public class CmsController(ReakDbContext db, INotificationService notificationService) : ControllerBase
+public class CmsController(ReakDbContext db, INotificationService notificationService, IAuditLogService auditLogService) : ControllerBase
 {
     // Sequential lifecycle, one step at a time in either direction — publishing skips straight to
     // Published only when the content was in Review, forcing every article through a review step
@@ -543,6 +544,9 @@ public class CmsController(ReakDbContext db, INotificationService notificationSe
         setting.Description = request.Description;
         setting.UpdatedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+
+        await auditLogService.LogAsync(CallerProfileId, "ConfigurationChanged", "SiteSetting", setting.Id, $"{setting.Key} was set.", ct);
+
         return Ok(ToDto(setting));
     }
 
@@ -554,6 +558,9 @@ public class CmsController(ReakDbContext db, INotificationService notificationSe
 
         db.SiteSettings.Remove(setting);
         await db.SaveChangesAsync(ct);
+
+        await auditLogService.LogAsync(CallerProfileId, "ConfigurationChanged", "SiteSetting", id, $"{setting.Key} was removed.", ct);
+
         return NoContent();
     }
 

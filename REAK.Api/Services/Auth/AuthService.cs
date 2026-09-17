@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Entities.Identity;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
@@ -16,7 +17,8 @@ public class AuthService(
     IJwtTokenService tokenService,
     IUserClaimsFactory claimsFactory,
     IEmailSender emailSender,
-    INotificationService notificationService) : IAuthService
+    INotificationService notificationService,
+    IAuditLogService auditLogService) : IAuthService
 {
     private const int MinPasswordLength = 8;
 
@@ -34,6 +36,8 @@ public class AuthService(
         profile.LastLoginAt = DateTime.UtcNow;
         var tokens = await IssueTokenPairAsync(profile, ip, ct);
         await db.SaveChangesAsync(ct);
+
+        await auditLogService.LogAsync(profile.Id, "Login", "Profile", profile.Id, $"{profile.Email} logged in.", ct);
 
         return new AuthResult(true, null, tokens);
     }
@@ -85,6 +89,7 @@ public class AuthService(
         await db.SaveChangesAsync(ct);
 
         await notificationService.NotifyAsync(profileId, NotificationType.AccountEvent, "Your password was changed", null, "/portal/settings", ct);
+        await auditLogService.LogAsync(profileId, "PasswordChanged", "Profile", profileId, $"{profile.Email} changed their password.", ct);
 
         return true;
     }
@@ -139,6 +144,7 @@ public class AuthService(
         await db.SaveChangesAsync(ct);
 
         await notificationService.NotifyAsync(resetToken.ProfileId, NotificationType.AccountEvent, "Your password was reset", null, "/portal/settings", ct);
+        await auditLogService.LogAsync(resetToken.ProfileId, "PasswordReset", "Profile", resetToken.ProfileId, $"{resetToken.Profile.Email} reset their password via a reset token.", ct);
 
         return true;
     }

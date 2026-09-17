@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Building2 } from "lucide-react";
+import { Building2, Download } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
-import { adminMemberEntitiesApi } from "@/lib/admin/api";
+import { adminMemberEntitiesApi, featureFlagsApi } from "@/lib/admin/api";
 import { suspendMemberEntityAction, reactivateMemberEntityAction } from "@/lib/admin/actions";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { SubmitButton } from "@/components/auth/submit-button";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -12,16 +13,27 @@ export const metadata: Metadata = { title: "Member Organizations" };
 
 export default async function AdminMembersPage() {
   const { accessToken } = await requireSession();
-  const result = await adminMemberEntitiesApi.list(accessToken);
+  const [result, flagsResult] = await Promise.all([
+    adminMemberEntitiesApi.list(accessToken),
+    featureFlagsApi.list(accessToken),
+  ]);
+  const exportEnabled = flagsResult.ok && flagsResult.data.some((f) => f.key === "member_export_enabled" && f.isEnabled);
 
   return (
     <div className="max-w-3xl space-y-6">
-      <div>
-        <h1 className="font-heading text-2xl font-bold text-foreground">Member Organizations</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Every REAK member organization, including suspended ones (spec §4.3). Suspending an org hides it
-          from the member directory — it does not suspend its individual users; do that from Users.
-        </p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="font-heading text-2xl font-bold text-foreground">Member Organizations</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Every REAK member organization, including suspended ones (spec §4.3). Suspending an org hides it
+            from the member directory — it does not suspend its individual users; do that from Users.
+          </p>
+        </div>
+        {exportEnabled ? (
+          <Button href="/api/portal/admin/members/export" variant="secondary" size="sm">
+            <Download className="h-4 w-4" /> Export CSV
+          </Button>
+        ) : null}
       </div>
 
       {!result.ok ? (

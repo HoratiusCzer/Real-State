@@ -105,8 +105,16 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
         return count;
     }
 
-    private async Task<MatchRuleSet?> GetPublishedRuleSetAsync(CancellationToken ct) =>
-        await db.MatchRuleSets.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Status == MatchRuleSetStatus.Published, ct);
+    private async Task<MatchRuleSet?> GetPublishedRuleSetAsync(CancellationToken ct)
+    {
+        // matching_enabled (spec §15, Stage 12) is a belt-and-suspenders kill switch on top of the
+        // existing "is a rule set published" gate — an admin can pause matching for maintenance
+        // without un-publishing (and thereby losing) the rule set itself.
+        var enabled = await db.FeatureFlags.Where(f => f.Key == "matching_enabled").Select(f => f.IsEnabled).FirstOrDefaultAsync(ct);
+        if (!enabled) return null;
+
+        return await db.MatchRuleSets.Include(s => s.Rules).FirstOrDefaultAsync(s => s.Status == MatchRuleSetStatus.Published, ct);
+    }
 
     private async Task<bool> UpsertMatchAsync(PropertyListing listing, Demand demand, MatchRuleSet ruleSet, CancellationToken ct)
     {

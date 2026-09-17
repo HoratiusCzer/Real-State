@@ -26,7 +26,7 @@ in the Production Development Prompt.
 9. ✅ Collaboration — **complete 2026-09-17**
 10. ✅ Notifications — **complete 2026-09-17**
 11. ✅ Admin + CMS — **complete 2026-09-17**
-12. ⏸️ Feature flags + reports + audit
+12. ✅ Feature flags + reports + audit — **complete 2026-09-17**
 13. ⏸️ Security hardening
 14. ⏸️ Performance + accessibility + responsive QA
 15. ⏸️ Full regression testing
@@ -841,7 +841,98 @@ logging in particular still has no write path at all (`AuditLogs`' RLS and its a
 trigger were built and tested in Stage 3, but nothing calls into it yet, a gap first noted back
 in Stage 7).
 
-## Stages 12–16
+## Stage 12 — Feature Flags + Reports + Audit (✅ complete)
+
+**Feature flags** (`FeatureFlagsController`, new): all 13 flags from spec §15 already existed
+(seeded, all off — "defaults should be conservative") but a grep across the codebase found only
+3 of them were ever actually *read* by anything: `public_properties_enabled`,
+`membership_application_enabled`, `property_moderation_required`. The other 10 were pure
+decoration. This stage's real work was deciding, flag by flag, which ones gate something real:
+
+- **Wired for real**: `matching_enabled` (a belt-and-suspenders kill switch on top of the existing
+  "is a rule set published" check inside `MatchingEngine.GetPublishedRuleSetAsync` — an admin can
+  pause matching for maintenance without un-publishing, and losing, the rule set itself),
+  `collaboration_enabled` (gates only *starting new* collaboration requests in
+  `CollaborationRequestService` — an already-accepted workspace keeps working if it's later
+  turned off, same "gate the entry point, not everything downstream" pattern
+  `membership_application_enabled` already used), `public_member_directory_enabled` and
+  `member_export_enabled` (see below — both needed a real feature built to gate, not just a
+  check).
+- **Left reserved and documented**, not wired to anything fake: `open_registration_enabled` (no
+  self-service signup flow exists — membership is always application + invitation),
+  `deal_tracking_enabled` and `auto_unit_conversion` (no such features exist anywhere in this
+  codebase), `sms_notifications`/`whatsapp_notifications`/`email_notifications` (no real delivery
+  provider exists for any channel — Stage 10 built in-app notifications only, explicitly). The
+  admin UI marks each of these "Reserved" rather than pretending they do something.
+
+**Closed a real, unrelated gap found while wiring `public_member_directory_enabled`**: the public
+`/members` and `/members/:slug` routes had been placeholder stubs since Stage 2, literally saying
+"once membership onboarding is live (Stage 4+)" — nobody had ever come back to finish them.
+Built `PublicMemberEntitiesController` (sanitized projection, same discipline as
+`PublicPropertiesController`/`PublicContentController` — never Email/Phone/Address, only what a
+member org would expect public) and the two frontend pages. `MemberEntity` has no `Slug` column
+(same situation `PropertyListing` was already in — see `/properties/[slug]`'s existing frontend
+comment); the id doubles as the route's `:slug` segment, same established convention.
+`member_export_enabled` similarly got a real feature: a plain CSV export of every member
+organization (`GET /api/member-entities/export`), defensively escaped rather than pulling in a
+CSV library for one endpoint.
+
+**Audit logging** (`IAuditLogService`/`AuditLogService`, `Services/Audit` — deliberately parallel
+to `INotificationService`: small, self-contained, fire-and-forget, never participates in the
+caller's own transaction): the `AuditLog` entity, its append-only database trigger, and
+`audit.read` permission had all existed and been tested since Stage 3 — genuinely nothing had
+ever written a row until now, a gap first noted back in Stage 7 and carried forward explicitly
+through every stage since. Wired into every category spec §19 names: login (`AuthService.
+LoginAsync`), security changes (password change/reset, profile suspend/reactivate), role changes
+(`InvitationService.AcceptAsync`), member changes (`MemberEntitiesController` update/suspend/
+reactivate, membership application approve/reject), listing changes (create/submit/approve/
+reject/archive/delete — deliberately *not* plain field edits, to keep the log meaningful rather
+than drowned in routine saves; the same scoping choice was made for demands), moderation actions
+(the listing approve/reject entries above self-document as moderation), collaboration events
+(request/accept/decline/cancel), contact disclosure (grant/revoke — the one category with an
+explicit spec warning attached: the summary records *that* a disclosure happened, by whom, for
+which data type and workspace, and deliberately never the actual contact value), feature flag
+changes, and configuration changes (`SiteSetting` upsert/delete). `AuditLogsController` gives
+admins a filterable, paginated read-only view; `AuditLog` itself carries no RLS (association-wide
+security record, not per-org private data — same reasoning `Notifications` already used), so
+`audit.read` is the only gate and the database trigger is what actually keeps it append-only.
+
+**Reports**: the one Stage 12 piece with no dedicated spec section (§15 and §19 both spell out
+exactly what to build; §4.3 just names "reports"). Kept deliberately modest rather than guessed
+at — real, database-backed breakdowns of data that already exists (listings/demands/matches/
+collaborations by status, member growth over the last 12 months), no invented metrics (spec §22),
+no charting library this codebase doesn't already depend on. Every listing/demand/match query is
+association-wide, so `ReportsController` needed the same `SessionContextOverride` elevation
+`DashboardController.AdminSummary` already established.
+
+**Verified end-to-end**, live: toggling `matching_enabled` off correctly reported "not configured"
+even with a published rule set (and correctly worked again once re-enabled), toggling
+`collaboration_enabled` off correctly blocked a new request with a clear error (and worked once
+re-enabled), the public member directory correctly returned an empty/disabled response before its
+flag was on and real data after, the CSV export correctly refused before its flag was on and
+produced a real file after, and every one of those toggles and actions produced a real, correctly-
+attributed audit log entry — spot-checked across `Login`, `FeatureFlagChanged` (×3),
+`CollaborationRequested`, `MemberEntitiesExported`, and `ListingArchived`. Reran `rls_test.sql`
+twice — still 7/7 (no RLS touched; `AuditLogs`' existing append-only trigger is what's actually
+being exercised, not new policy). `dotnet build` and `npm run build`/`lint` both clean on the
+first full pass.
+
+**Frontend**: `/admin/feature-flags` (toggle UI, reserved flags visibly marked), `/admin/
+audit-logs` (filterable by entity type/action, paginated), `/admin/reports` (stat breakdowns,
+same visual language as the Admin Dashboard's tiles), a CSV export button on `/admin/members`
+gated by its flag, and the two newly-real public member-directory pages. **Not visually verified
+in a browser** — same gap as every stage since Stage 9; verified via real HTTP calls against
+every endpoint plus confirming every route serves correct status/content rather than crashing
+server-side.
+
+**End-of-stage flag state, left intentionally**: `matching_enabled`, `collaboration_enabled`,
+`public_member_directory_enabled`, and `member_export_enabled` were left *on* after testing (each
+was verified working, and turning them back off would silently break the matching/collaboration
+demo data exercised across Stages 8-11) — this is an ordinary admin action, not a change to the
+seeded defaults, which remain off. Every other flag remains off, including the genuinely-reserved
+ones.
+
+## Stages 13–16
 
 Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
 for the full scope of each. Will be broken into their own plan sections as they start, each
@@ -852,4 +943,4 @@ approach (§37 of the original PDF, reproduced in the "Process note" of
 ---
 
 **Last updated**: 2026-09-17
-**Status**: Stages 1-11 complete. Stage 12 next.
+**Status**: Stages 1-12 complete. Stage 13 next.

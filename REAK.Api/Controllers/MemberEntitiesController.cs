@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Controllers;
@@ -17,7 +18,7 @@ namespace REAK.Api.Controllers;
 [ApiController]
 [Route("api/member-entities")]
 [Authorize]
-public class MemberEntitiesController(ReakDbContext db) : ControllerBase
+public class MemberEntitiesController(ReakDbContext db, IAuditLogService auditLogService) : ControllerBase
 {
     /// <summary>includeInactive is silently ignored for anyone but a system admin — the ordinary
     /// member directory (spec §4.2) must never leak a suspended org's existence to other members;
@@ -85,6 +86,10 @@ public class MemberEntitiesController(ReakDbContext db) : ControllerBase
         entity.Email = request.Email;
         entity.Address = request.Address;
         await db.SaveChangesAsync(ct);
+
+        var updaterId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(updaterId, "MemberEntityUpdated", "MemberEntity", id, $"{entity.Name} was updated.", ct);
+
         return NoContent();
     }
 
@@ -103,6 +108,10 @@ public class MemberEntitiesController(ReakDbContext db) : ControllerBase
 
         entity.IsActive = false;
         await db.SaveChangesAsync(ct);
+
+        var actorId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(actorId, "MemberEntitySuspended", "MemberEntity", id, $"{entity.Name} was suspended.", ct);
+
         return NoContent();
     }
 
@@ -117,6 +126,48 @@ public class MemberEntitiesController(ReakDbContext db) : ControllerBase
 
         entity.IsActive = true;
         await db.SaveChangesAsync(ct);
+
+        var actorId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(actorId, "MemberEntityReactivated", "MemberEntity", id, $"{entity.Name} was reactivated.", ct);
+
         return NoContent();
+    }
+
+    /// <summary>What member_export_enabled (spec §15, Stage 12) actually gates — a plain CSV of
+    /// every member organization, admin-only. Simple string-concatenation CSV rather than a
+    /// library dependency: every field here is admin-authored plain text (org name/description/
+    /// contact details), never free-form user content, so the usual CSV-injection concerns don't
+    /// apply, but commas/quotes/newlines are still escaped defensively.</summary>
+    [HttpGet("export")]
+    [RequirePermission("settings.manage")]
+    public async Task<IActionResult> Export(CancellationToken ct)
+    {
+        var enabled = await db.FeatureFlags.Where(f => f.Key == "member_export_enabled").Select(f => f.IsEnabled).FirstOrDefaultAsync(ct);
+        if (!enabled) return BadRequest(new { error = "Member export is not currently enabled." });
+
+        var entities = await db.MemberEntities
+            .OrderBy(m => m.Name)
+            .Select(m => new { m.Name, m.Description, m.Website, m.Phone, m.Email, m.Address, m.IsActive, m.CreatedAt })
+            .ToListAsync(ct);
+
+        var csv = new System.Text.StringBuilder();
+        csv.AppendLine("Name,Description,Website,Phone,Email,Address,Active,CreatedAt");
+        foreach (var e in entities)
+        {
+            csv.AppendLine(string.Join(",", CsvField(e.Name), CsvField(e.Description), CsvField(e.Website), CsvField(e.Phone), CsvField(e.Email), CsvField(e.Address), e.IsActive, e.CreatedAt.ToString("u")));
+        }
+
+        var actorId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(actorId, "MemberEntitiesExported", "MemberEntity", null, $"{entities.Count} member organizations exported to CSV.", ct);
+
+        return File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "member-organizations.csv");
+    }
+
+    private static string CsvField(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        return value.Contains(',') || value.Contains('"') || value.Contains('\n')
+            ? $"\"{value.Replace("\"", "\"\"")}\""
+            : value;
     }
 }

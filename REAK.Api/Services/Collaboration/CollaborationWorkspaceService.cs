@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Collaboration;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
@@ -17,7 +18,7 @@ namespace REAK.Api.Services.Collaboration;
 /// no rows for a non-participant means an empty list or a null result, not an error, which is
 /// exactly the fail-closed behavior we want. Writes are guarded the same way ListingService
 /// guards its writes: catch the RLS block-predicate SqlException and translate it to Forbidden.</summary>
-public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService) : ICollaborationWorkspaceService
+public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService, IAuditLogService auditLogService) : ICollaborationWorkspaceService
 {
     private record ListingDemandOrgs(Guid? ListingId, string? ListingTitle, Guid? ListingOrgId, Guid? DemandId, string? DemandTitle, Guid? DemandOrgId);
 
@@ -218,9 +219,10 @@ public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverr
             d => d.CollaborationWorkspaceId == workspaceId && d.DataType == dataType && d.RevokedAt == null, ct);
         if (alreadyGranted) return new CollabOp(CollabOpResult.Success);
 
+        var disclosureId = Guid.NewGuid();
         db.CollaborationContactDisclosures.Add(new CollaborationContactDisclosure
         {
-            Id = Guid.NewGuid(), CollaborationWorkspaceId = workspaceId, DataType = dataType,
+            Id = disclosureId, CollaborationWorkspaceId = workspaceId, DataType = dataType,
             GrantingMemberEntityId = grantingOrgId, ReceivingMemberEntityId = receivingOrgId, GrantingProfileId = caller.ProfileId,
         });
         db.CollaborationActivities.Add(new CollaborationActivity
@@ -228,7 +230,15 @@ public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverr
             Id = Guid.NewGuid(), CollaborationWorkspaceId = workspaceId, ProfileId = caller.ProfileId,
             Action = $"{dataType} disclosed to the other organization.",
         });
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == CollabOpResult.Success)
+        {
+            // Spec §19's explicit "contact disclosure" audit category — deliberately never
+            // includes the actual contact value (name/phone/email) in the summary, only that a
+            // grant occurred, by whom, for which data type and workspace.
+            await auditLogService.LogAsync(caller.ProfileId, "ContactDisclosureGranted", "CollaborationContactDisclosure", disclosureId, $"{dataType} disclosed for workspace {workspaceId}.", ct);
+        }
+        return op;
     }
 
     public async Task<CollabOp> RevokeContactDisclosureAsync(Guid workspaceId, Guid disclosureId, CallerContext caller, CancellationToken ct = default)
@@ -247,7 +257,12 @@ public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverr
             Id = Guid.NewGuid(), CollaborationWorkspaceId = workspaceId, ProfileId = caller.ProfileId,
             Action = $"{disclosure.DataType} disclosure revoked.",
         });
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == CollabOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "ContactDisclosureRevoked", "CollaborationContactDisclosure", disclosureId, $"{disclosure.DataType} disclosure revoked for workspace {workspaceId}.", ct);
+        }
+        return op;
     }
 
     private async Task<CollabOp> SaveGuardedAsync(CancellationToken ct)

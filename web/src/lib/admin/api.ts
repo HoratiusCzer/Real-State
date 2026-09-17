@@ -2,11 +2,33 @@ import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from "../api-client";
 import type {
   PageItem, NewsItem, NoticeItem, EventItem, ResourceItem, CommitteeMemberItem, NavigationItemItem, SiteSettingItem,
   AdminDashboardSummary, MembershipApplication, AdminInvitation, AdminMemberEntity, AdminProfile, AdminRole,
+  FeatureFlag, AuditLogSearchResult, ReportsSummary,
 } from "./types";
 import type { MatchRuleSet } from "../matching/types";
 
 export const adminDashboardApi = {
   summary: (accessToken: string) => apiGet<AdminDashboardSummary>("/api/dashboard/admin-summary", accessToken),
+};
+
+export const featureFlagsApi = {
+  list: (accessToken: string) => apiGet<FeatureFlag[]>("/api/feature-flags", accessToken),
+  setEnabled: (accessToken: string, key: string, isEnabled: boolean) => apiPut<void>(`/api/feature-flags/${key}`, { isEnabled }, accessToken),
+};
+
+export const auditLogsApi = {
+  list: (accessToken: string, params: { entityType?: string; action?: string; page?: number }) => {
+    const usp = new URLSearchParams();
+    if (params.entityType) usp.set("entityType", params.entityType);
+    if (params.action) usp.set("action", params.action);
+    if (params.page) usp.set("page", String(params.page));
+    const qs = usp.toString();
+    return apiGet<AuditLogSearchResult>(`/api/audit-logs${qs ? `?${qs}` : ""}`, accessToken);
+  },
+  entityTypes: (accessToken: string) => apiGet<string[]>("/api/audit-logs/entity-types", accessToken),
+};
+
+export const reportsApi = {
+  summary: (accessToken: string) => apiGet<ReportsSummary>("/api/reports/summary", accessToken),
 };
 
 export const cmsPagesApi = {

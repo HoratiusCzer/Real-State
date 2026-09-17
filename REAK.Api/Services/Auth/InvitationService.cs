@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Entities.Identity;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
@@ -10,7 +11,7 @@ namespace REAK.Api.Services.Auth;
 /// <summary>Flow A steps 3-5 (spec §2.4): admin creates an invitation, invitee accepts (setting a
 /// password if they're a brand-new profile), and an EntityUser row links them to their member
 /// organization with the granted role.</summary>
-public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender, INotificationService notificationService) : IInvitationService
+public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender, INotificationService notificationService, IAuditLogService auditLogService) : IInvitationService
 {
     public async Task<Invitation> CreateAsync(string email, Guid? memberEntityId, Guid roleId, Guid invitedByProfileId, CancellationToken ct = default)
     {
@@ -78,7 +79,7 @@ public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher,
 
     public async Task<(bool Success, string? Error)> AcceptAsync(string token, string? password, CancellationToken ct = default)
     {
-        var invitation = await db.Invitations.FirstOrDefaultAsync(i => i.Token == token, ct);
+        var invitation = await db.Invitations.Include(i => i.Role).FirstOrDefaultAsync(i => i.Token == token, ct);
         if (invitation is null)
         {
             return (false, "Invitation not found.");
@@ -150,6 +151,7 @@ public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher,
         await db.SaveChangesAsync(ct);
 
         await notificationService.NotifyAsync(invitation.InvitedByProfileId, NotificationType.Invitation, $"{invitation.Email} accepted your invitation", null, null, ct);
+        await auditLogService.LogAsync(profile.Id, "RoleGranted", "ProfileRoleAssignment", profile.Id, $"{invitation.Email} was granted {invitation.Role.Name} via invitation.", ct);
 
         return (true, null);
     }

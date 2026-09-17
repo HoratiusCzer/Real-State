@@ -3,6 +3,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Collaboration;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Security;
 
@@ -14,13 +15,17 @@ namespace REAK.Api.Services.Collaboration;
 /// §13.2). CollaborationRequest has no RLS of its own (it has no CollaborationWorkspaceId to hang
 /// a participant-predicate off before a workspace exists), so every method here does its own
 /// explicit from/to-org ownership check — same pattern as Notifications/MemberEntities.</summary>
-public class CollaborationRequestService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService) : ICollaborationRequestService
+public class CollaborationRequestService(ReakDbContext db, SessionContextOverride sessionContextOverride, INotificationService notificationService, IAuditLogService auditLogService) : ICollaborationRequestService
 {
     private record MatchOrgs(Guid ListingOrgId, string ListingOrgName, Guid DemandOrgId, string DemandOrgName);
 
 
     public async Task<(CollabOp Op, Guid? RequestId)> CreateFromMatchAsync(CallerContext caller, Guid matchId, string? message, CancellationToken ct = default)
     {
+        if (!await IsCollaborationEnabledAsync(ct))
+        {
+            return (new CollabOp(CollabOpResult.InvalidState, "Collaboration is not currently enabled."), null);
+        }
         if (caller.MemberEntityIds.Count == 0)
         {
             return (new CollabOp(CollabOpResult.Forbidden, "You must belong to a member organization to request collaboration."), null);
@@ -86,12 +91,17 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         await db.SaveChangesAsync(ct);
 
         await notificationService.NotifyOrgAsync(toOrg, NotificationType.CollaborationRequest, $"{fromOrgName} requested to collaborate", message, "/portal/collaborations", ct);
+        await auditLogService.LogAsync(caller.ProfileId, "CollaborationRequested", "CollaborationRequest", request.Id, $"{fromOrgName} requested collaboration (from match).", ct);
 
         return (new CollabOp(CollabOpResult.Success), request.Id);
     }
 
     public async Task<(CollabOp Op, Guid? RequestId)> CreateToOrgAsync(CallerContext caller, Guid toMemberEntityId, string? message, CancellationToken ct = default)
     {
+        if (!await IsCollaborationEnabledAsync(ct))
+        {
+            return (new CollabOp(CollabOpResult.InvalidState, "Collaboration is not currently enabled."), null);
+        }
         if (caller.MemberEntityIds.Count == 0)
         {
             return (new CollabOp(CollabOpResult.Forbidden, "You must belong to a member organization to request collaboration."), null);
@@ -122,6 +132,7 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
 
         var fromOrgName = await db.MemberEntities.Where(m => m.Id == fromOrg).Select(m => m.Name).FirstAsync(ct);
         await notificationService.NotifyOrgAsync(toMemberEntityId, NotificationType.CollaborationRequest, $"{fromOrgName} requested to collaborate", message, "/portal/collaborations", ct);
+        await auditLogService.LogAsync(caller.ProfileId, "CollaborationRequested", "CollaborationRequest", request.Id, $"{fromOrgName} requested collaboration (standalone).", ct);
 
         return (new CollabOp(CollabOpResult.Success), request.Id);
     }
@@ -200,6 +211,7 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         }
 
         await notificationService.NotifyAsync(request.RequestedByProfileId, NotificationType.CollaborationAccepted, "Your collaboration request was accepted", null, $"/portal/collaborations/{workspace.Id}", ct);
+        await auditLogService.LogAsync(caller.ProfileId, "CollaborationAccepted", "CollaborationRequest", request.Id, "Collaboration request accepted; workspace created.", ct);
 
         return (new CollabOp(CollabOpResult.Success), workspace.Id);
     }
@@ -223,6 +235,7 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         await db.SaveChangesAsync(ct);
 
         await notificationService.NotifyAsync(request.RequestedByProfileId, NotificationType.CollaborationDeclined, "Your collaboration request was declined", null, "/portal/collaborations", ct);
+        await auditLogService.LogAsync(caller.ProfileId, "CollaborationDeclined", "CollaborationRequest", request.Id, "Collaboration request declined.", ct);
 
         return new CollabOp(CollabOpResult.Success);
     }
@@ -243,6 +256,14 @@ public class CollaborationRequestService(ReakDbContext db, SessionContextOverrid
         request.Status = CollaborationRequestStatus.Cancelled;
         request.RespondedAt = DateTime.UtcNow;
         await db.SaveChangesAsync(ct);
+        await auditLogService.LogAsync(caller.ProfileId, "CollaborationCancelled", "CollaborationRequest", request.Id, "Collaboration request cancelled.", ct);
         return new CollabOp(CollabOpResult.Success);
     }
+
+    // collaboration_enabled (spec §15, Stage 12) only gates starting a *new* request — an
+    // already-accepted workspace and everything inside it (messages, contact disclosures, etc.)
+    // keeps working even if this is later turned off, same as membership_application_enabled only
+    // gates new submissions, not previously-approved members.
+    private async Task<bool> IsCollaborationEnabledAsync(CancellationToken ct) =>
+        await db.FeatureFlags.Where(f => f.Key == "collaboration_enabled").Select(f => f.IsEnabled).FirstOrDefaultAsync(ct);
 }

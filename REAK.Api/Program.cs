@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
 using REAK.Api.Data;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Auth;
 using REAK.Api.Services.Collaboration;
 using REAK.Api.Services.Demands;
@@ -47,6 +48,7 @@ builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationS
 // real provider (SendGrid/SES/SMTP) here before production (spec §34).
 builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddHostedService<ExpiryScanService>();
 
 builder.Services.AddScoped<IReferenceCodeGenerator, ReferenceCodeGenerator>();

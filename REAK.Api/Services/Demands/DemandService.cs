@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Demands;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Matching;
 using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
@@ -19,7 +20,7 @@ namespace REAK.Api.Services.Demands;
 /// hierarchy depth the client cares about (spec §9: "do not model relationships as arrays — use
 /// proper join tables"). Also mirrors ListingService's Stage 8 matching-engine trigger points —
 /// see SaveGuardedAndRecomputeAsync.</summary>
-public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine) : IDemandService
+public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine, IAuditLogService auditLogService) : IDemandService
 {
     public async Task<DemandSearchResult> SearchAsync(DemandSearchQuery query, CallerContext? caller, CancellationToken ct = default)
     {
@@ -145,6 +146,7 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         }
 
         await db.SaveChangesAsync(ct);
+        await auditLogService.LogAsync(caller.ProfileId, "DemandCreated", "Demand", demand.Id, $"\"{demand.Title}\" ({referenceCode}) was created.", ct);
         return (new DemandOp(DemandOpResult.Success), demand.Id);
     }
 
@@ -184,7 +186,12 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.Status = DemandStatus.Active;
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAndRecomputeAsync(id, ct);
+        var publishOp = await SaveGuardedAndRecomputeAsync(id, ct);
+        if (publishOp.Result == DemandOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "DemandPublished", "Demand", id, $"\"{demand.Title}\" was published.", ct);
+        }
+        return publishOp;
     }
 
     public async Task<DemandOp> FulfillAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -199,7 +206,12 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.Status = DemandStatus.Fulfilled;
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == DemandOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "DemandFulfilled", "Demand", id, $"\"{demand.Title}\" was marked fulfilled.", ct);
+        }
+        return op;
     }
 
     public async Task<DemandOp> ArchiveAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -210,7 +222,12 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.Status = DemandStatus.Archived;
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == DemandOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "DemandArchived", "Demand", id, $"\"{demand.Title}\" was archived.", ct);
+        }
+        return op;
     }
 
     public async Task<DemandOp> SoftDeleteAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -222,7 +239,12 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
         demand.DeletedAt = DateTime.UtcNow;
         demand.UpdatedByProfileId = caller.ProfileId;
         demand.UpdatedAt = DateTime.UtcNow;
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == DemandOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "DemandDeleted", "Demand", id, $"\"{demand.Title}\" was deleted.", ct);
+        }
+        return op;
     }
 
     public async Task<DemandOp> ReplacePropertyTypesAsync(Guid id, CallerContext caller, IReadOnlyList<Guid> propertyTypeIds, CancellationToken ct = default)

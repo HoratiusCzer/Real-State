@@ -2,13 +2,14 @@ using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Entities.Identity;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 
 namespace REAK.Api.Services.Auth;
 
 /// <summary>Flow A steps 1-3 (spec §2.4): a visitor applies, an admin approves or rejects, and
 /// approval creates the MemberEntity plus a MemberAdmin invitation for the applicant in one step —
 /// the rest of Flow A (invitation acceptance) is IInvitationService's job.</summary>
-public class MembershipApplicationService(ReakDbContext db, IInvitationService invitationService) : IMembershipApplicationService
+public class MembershipApplicationService(ReakDbContext db, IInvitationService invitationService, IAuditLogService auditLogService) : IMembershipApplicationService
 {
     public async Task<(bool Success, string? Error, MembershipApplication? Application)> SubmitAsync(
         string companyName, string contactName, string email, string phone, string? message, CancellationToken ct = default)
@@ -72,6 +73,7 @@ public class MembershipApplicationService(ReakDbContext db, IInvitationService i
         await db.SaveChangesAsync(ct);
 
         await invitationService.CreateAsync(application.Email, memberEntity.Id, memberAdminRole.Id, reviewedByProfileId, ct);
+        await auditLogService.LogAsync(reviewedByProfileId, "MembershipApplicationApproved", "MembershipApplication", applicationId, $"{application.CompanyName}'s application was approved; {memberEntity.Name} created.", ct);
 
         return (true, null);
     }
@@ -95,6 +97,7 @@ public class MembershipApplicationService(ReakDbContext db, IInvitationService i
         application.RejectionReason = reason;
 
         await db.SaveChangesAsync(ct);
+        await auditLogService.LogAsync(reviewedByProfileId, "MembershipApplicationRejected", "MembershipApplication", applicationId, $"{application.CompanyName}'s application was rejected: {reason}", ct);
         return (true, null);
     }
 }

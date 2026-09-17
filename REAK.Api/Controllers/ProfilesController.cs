@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using REAK.Api.Data;
 using REAK.Api.Models.Dto;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Controllers;
@@ -12,7 +13,7 @@ namespace REAK.Api.Controllers;
 [ApiController]
 [Route("api/profiles")]
 [Authorize]
-public class ProfilesController(ReakDbContext db) : ControllerBase
+public class ProfilesController(ReakDbContext db, IAuditLogService auditLogService) : ControllerBase
 {
     /// <summary>Admin Portal "users" list (Stage 11, spec §4.3) — every profile, regardless of
     /// which org(s) it belongs to or none at all, so an admin can find and suspend anyone.</summary>
@@ -74,6 +75,10 @@ public class ProfilesController(ReakDbContext db) : ControllerBase
 
         profile.IsActive = false;
         await db.SaveChangesAsync(ct);
+
+        var actorId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(actorId, "ProfileSuspended", "Profile", id, $"{profile.Email} was suspended.", ct);
+
         return NoContent();
     }
 
@@ -89,6 +94,10 @@ public class ProfilesController(ReakDbContext db) : ControllerBase
 
         profile.IsActive = true;
         await db.SaveChangesAsync(ct);
+
+        var actorId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+        await auditLogService.LogAsync(actorId, "ProfileReactivated", "Profile", id, $"{profile.Email} was reactivated.", ct);
+
         return NoContent();
     }
 }

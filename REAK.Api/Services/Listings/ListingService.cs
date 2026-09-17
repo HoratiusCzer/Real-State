@@ -4,6 +4,7 @@ using REAK.Api.Data;
 using REAK.Api.Models.Dto;
 using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Audit;
 using REAK.Api.Services.Matching;
 using REAK.Api.Services.Notifications;
 using REAK.Api.Services.Reference;
@@ -21,7 +22,7 @@ namespace REAK.Api.Services.Listings;
 /// that could newly qualify a listing for matching or change data that affects an existing
 /// match's score — the engine itself no-ops when the listing isn't Approved or no rule set is
 /// published, so it's safe to call unconditionally rather than duplicating that logic here.</summary>
-public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine, INotificationService notificationService) : IListingService
+public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceCodeGenerator, IMatchingEngine matchingEngine, INotificationService notificationService, IAuditLogService auditLogService) : IListingService
 {
     public async Task<ListingSearchResult> SearchAsync(ListingSearchQuery query, CallerContext? caller, CancellationToken ct = default)
     {
@@ -176,6 +177,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         }
 
         await db.SaveChangesAsync(ct);
+        await auditLogService.LogAsync(caller.ProfileId, "ListingCreated", "PropertyListing", listing.Id, $"\"{listing.Title}\" ({referenceCode}) was created.", ct);
         return (new ListingOp(ListingOpResult.Success), listing.Id);
     }
 
@@ -246,7 +248,12 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAndRecomputeAsync(id, ct);
+        var submitOp = await SaveGuardedAndRecomputeAsync(id, ct);
+        if (submitOp.Result == ListingOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "ListingSubmitted", "PropertyListing", id, $"\"{listing.Title}\" was submitted ({listing.Status}).", ct);
+        }
+        return submitOp;
     }
 
     public async Task<ListingOp> ApproveAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -267,6 +274,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         if (op.Result == ListingOpResult.Success)
         {
             await notificationService.NotifyAsync(listing.CreatedByProfileId, NotificationType.ListingApproved, $"\"{listing.Title}\" was approved", null, $"/portal/properties/{id}", ct);
+            await auditLogService.LogAsync(caller.ProfileId, "ListingApproved", "PropertyListing", id, $"\"{listing.Title}\" was approved.", ct);
         }
         return op;
     }
@@ -289,6 +297,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         if (op.Result == ListingOpResult.Success)
         {
             await notificationService.NotifyAsync(listing.CreatedByProfileId, NotificationType.ListingRejected, $"\"{listing.Title}\" was rejected", reason, $"/portal/properties/{id}", ct);
+            await auditLogService.LogAsync(caller.ProfileId, "ListingRejected", "PropertyListing", id, $"\"{listing.Title}\" was rejected: {reason}", ct);
         }
         return op;
     }
@@ -302,7 +311,12 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == ListingOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "ListingArchived", "PropertyListing", id, $"\"{listing.Title}\" was archived.", ct);
+        }
+        return op;
     }
 
     public async Task<ListingOp> SoftDeleteAsync(Guid id, CallerContext caller, CancellationToken ct = default)
@@ -315,7 +329,12 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.UpdatedByProfileId = caller.ProfileId;
         listing.UpdatedAt = DateTime.UtcNow;
 
-        return await SaveGuardedAsync(ct);
+        var op = await SaveGuardedAsync(ct);
+        if (op.Result == ListingOpResult.Success)
+        {
+            await auditLogService.LogAsync(caller.ProfileId, "ListingDeleted", "PropertyListing", id, $"\"{listing.Title}\" was deleted.", ct);
+        }
+        return op;
     }
 
     public async Task<ListingOp> ReplaceAmenitiesAsync(Guid id, CallerContext caller, IReadOnlyList<Guid> amenityIds, CancellationToken ct = default)

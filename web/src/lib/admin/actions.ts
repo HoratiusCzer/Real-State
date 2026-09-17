@@ -6,6 +6,7 @@ import { getAccessToken } from "@/lib/auth/session";
 import {
   cmsPagesApi, cmsNewsApi, cmsNoticesApi, cmsEventsApi, cmsResourcesApi, cmsCommitteeApi, cmsNavigationApi, cmsSettingsApi,
   adminMembershipApplicationsApi, adminInvitationsApi, adminMemberEntitiesApi, adminProfilesApi, adminMatchRuleSetsApi,
+  featureFlagsApi,
 } from "./api";
 
 async function requireAccessToken(): Promise<string> {
@@ -315,4 +316,11 @@ export async function archiveMatchRuleSetAction(id: string) {
   await adminMatchRuleSetsApi.archive(accessToken, id);
   revalidatePath(`/admin/match-rules/${id}`);
   revalidatePath("/admin/match-rules");
+}
+
+// ---- Feature flags ----
+export async function setFeatureFlagAction(key: string, isEnabled: boolean) {
+  const accessToken = await requireAccessToken();
+  await featureFlagsApi.setEnabled(accessToken, key, isEnabled);
+  revalidatePath("/admin/feature-flags");
 }

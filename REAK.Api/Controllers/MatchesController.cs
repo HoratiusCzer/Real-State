@@ -47,8 +47,9 @@ public class MatchesController(ReakDbContext db, SessionContextOverride sessionC
         sessionContextOverride.IsSystemLevel = true;
         try
         {
+            var matchingEnabled = await db.FeatureFlags.Where(f => f.Key == "matching_enabled").Select(f => f.IsEnabled).FirstOrDefaultAsync(ct);
             var noRuleSetPublished = !await db.MatchRuleSets.AnyAsync(s => s.Status == MatchRuleSetStatus.Published, ct);
-            if (noRuleSetPublished)
+            if (!matchingEnabled || noRuleSetPublished)
             {
                 return Ok(new { configured = false, result = new MatchSearchResult([], 0, page, pageSize) });
             }
