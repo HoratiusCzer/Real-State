@@ -1,4 +1,5 @@
 import Link from "next/link";
+import Image from "next/image";
 import { Home } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,10 +41,9 @@ export function PropertyCard({
   return (
     <Link href={href}>
       <Card className="overflow-hidden transition-colors hover:border-accent">
-        <div className="flex h-40 items-center justify-center bg-muted">
+        <div className="relative flex h-40 items-center justify-center bg-muted">
           {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img src={imageUrl} alt={title} className="h-full w-full object-cover" />
+            <Image src={imageUrl} alt={title} fill sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 384px" className="object-cover" />
           ) : (
             <Home className="h-10 w-10 text-muted-foreground" aria-hidden="true" />
           )}

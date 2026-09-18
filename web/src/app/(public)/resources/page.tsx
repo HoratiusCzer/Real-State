@@ -4,7 +4,7 @@ import { publicContentApi } from "@/lib/public-content/api";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export const metadata: Metadata = { title: "Resources" };
+export const metadata: Metadata = { title: "Resources", alternates: { canonical: "/resources" } };
 
 export default async function ResourcesPage() {
   const result = await publicContentApi.listResources();

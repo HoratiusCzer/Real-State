@@ -1002,15 +1002,107 @@ present on every response including static-file ones (checked an actual listing 
 twice — still 7/7 (no RLS touched this stage). `dotnet build` and `npm run build`/`lint` clean,
 `dotnet list package --vulnerable` and `npm audit` both zero findings.
 
-## Stages 14–16
+## Stage 14 — Performance + Accessibility + Responsive QA (✅ complete)
 
-Detailed only once we reach them — see `docs/REAK-requirements.md` §4, §6–§14, §27, §34, §36
-for the full scope of each. Will be broken into their own plan sections as they start, each
-with its own daily-log entry and test results, per the spec's own recommended execution
-approach (§37 of the original PDF, reproduced in the "Process note" of
-`docs/REAK-requirements.md` §2.6).
+Chrome browser automation became available for the first time this session — every prior stage's
+"browser QA" was actually curl/HTTP-level verification (explicitly documented as a gap each time).
+This is the first stage verified against an actual rendered page, and it immediately surfaced a
+real, previously-shipped bug that no amount of curl testing could have caught.
+
+**Real bug found and fixed — listing photos never rendered for any visitor.**
+`IFileStorage.GetPublicUrl()` (`REAK.Api/Services/Storage/LocalDiskFileStorage.cs`) returns a
+relative `/media/<file>` path by design — it has no opinion on what origin serves it. Rendered
+directly as an `<img src>`, that path resolved against the *Next.js app's own* origin (port 3000),
+not the API's (port 5080), so every listing photo has 404'd since Stage 6. Fixed with a
+`next.config.ts` rewrite (`/media/:path*` → `REAK_API_URL`), the same "browser never talks to the
+API's raw origin" pattern every other proxy route in this app already uses — never a client-side
+redirect, so `REAK_API_URL` stays server-only. Verified via curl before/after, then confirmed
+visually once the browser was available.
+
+**`next/image` adopted** across property cards, the public/portal property detail pages, and the
+wizard's upload-preview grid (`fill` + `sizes`, `object-cover`). Caught a real accessibility gap in
+the same pass: wizard upload previews had `alt=""`, now `alt="Uploaded photo N"`.
+
+**A second, genuinely confusing bug turned up while verifying the `next/image` conversion in the
+browser**: the first property card rendered a broken-image icon instead of the photo, even though
+curl and `fetch()` against the exact same URL both returned `200 image/jpeg`. Traced by fetching
+the raw bytes in-page: the only listing photo in local dev storage was a 19-byte stub file (`ff d8
+ff e0` followed by the literal text "qa-test-phot...") — leftover fixture data from an earlier
+stage's curl-based upload test, never a real image. `fetch()`/curl don't validate image content, so
+every prior HTTP-level check passed; a real browser's image decoder correctly refused to render it.
+Not a code bug. Replaced the stub with a real 1x1 JPEG to confirm — the `next/image`/`fill`/rewrite
+plumbing then rendered correctly. Along the way, discovered this Next.js version's dev image
+optimizer cache lives at `.next/dev/cache/images`, not the legacy `.next/cache/images` — exactly
+the kind of version-specific relocation `web/AGENTS.md` warns training data won't know about;
+clearing the wrong path left the optimizer serving the stale broken result until the correct
+directory was cleared.
+
+**Responsive fix — portal and admin sidebars.** Both `PortalSidebar` and `AdminSidebar` were a
+plain always-visible vertical list with zero mobile behavior: on a narrow viewport this squeezed
+page content into an unusably thin column next to a fixed-width sidebar, the same "shrunken
+desktop" anti-pattern spec §23 warns about, just applied to navigation instead of a table. Both now
+collapse below `md` into the same disclosure-button pattern `SiteHeader`'s mobile nav already uses
+(`aria-expanded`/`aria-controls`, closes on navigation). The close-on-navigate logic hit React's
+`react-hooks/set-state-in-effect` lint rule (`useEffect(() => setOpen(false), [pathname])` calls
+`setState` synchronously inside an effect); fixed with React's own documented alternative —
+compare the current `pathname` against a stored previous value during render and call `setState`
+conditionally inline, no effect at all. `portal/layout.tsx` and `admin/layout.tsx` given matching
+`flex-col`→`md:flex-row` container changes so the sidebar stacks above content on mobile.
+**Caveat**: `resize_window` did not actually change the captured viewport in this environment
+across three attempts (including a full reload) — genuine mobile-breakpoint pixel verification
+could not be done. Verified instead by reading the rendered DOM/CSS directly: confirmed
+`md:hidden` on the toggle button and `hidden`/`md:block` on the nav are present and correctly
+applied at the current (desktop) viewport, and the structural pattern is identical to
+`SiteHeader`'s mobile nav, which *was* pixel-verified in an earlier stage.
+
+**Loading/error boundaries**: added `loading.tsx` + `error.tsx` for the `(public)`, `portal`, and
+`admin` route groups (6 new files) — previously a slow data fetch or a thrown error showed either
+nothing or Next's generic unstyled fallback. Nested inside each group's existing layout, so only
+the segment content is replaced, not the header/sidebar chrome. This Next.js version's
+`error.tsx` reset callback is named `retry`, not the legacy `reset` — caught by reading
+`node_modules/next/dist/docs/` rather than assumed from training data, per `AGENTS.md`.
+
+**SEO**: `sitemap.ts` rewritten from a static 14-route list to fetch real published news/notices/
+events/members/properties and include their URLs (verified live: 20 total URLs). Root `layout.tsx`
+given `metadataBase` + a default `openGraph` block so every child page can pass a relative
+canonical/OG URL. All 14 static public pages plus the four `[slug]` detail routes now have
+`generateMetadata`/`metadata` with `alternates.canonical` and `openGraph` (previously title-only or
+entirely absent on several).
+
+**Caching**: reference/taxonomy data (property types, purposes, provinces, districts) — admin-
+managed, rarely changing — now opts into `next: { revalidate: 3600 }` on top of the codebase-wide
+`cache: "no-store"` default in `api-client.ts`; every other call site is unaffected.
+
+**Accessibility**: fixed two icon-only delete buttons (photo, document) missing `aria-label` in
+`portal/properties/[id]/page.tsx`, found opportunistically while converting that page's media grid
+to `next/image`. Hand-verified WCAG 2.2 AA contrast for `--color-muted-foreground` (#64748b on
+white) at ≈4.80:1, passing the 4.5:1 threshold. Confirmed `prefers-reduced-motion` is already
+handled globally (Stage 2's `*`+`!important` media-query rule in `globals.css`) — no change needed.
+Confirmed existing semantic landmarks (`header`/`main`/`aside`/`nav aria-label`/`footer`) and the
+disclosure-pattern ARIA already used by `SiteHeader`'s mobile menu, now replicated identically in
+both portal/admin sidebars.
+
+**Also fixed while in these files**: a dead download link in `portal/properties/[id]/page.tsx`
+(`/api/listings/...` → `/api/portal/listings/...`, no such route existed) via a new proxy route
+mirroring the Stage 9 collaboration-file-download pattern.
+
+**Verified end-to-end, live in an actual browser** (first time this session type has been
+possible): logged in as a real member, confirmed the dashboard, property listing cards (now
+showing real images), property detail page, and portal navigation all render correctly at desktop
+width; confirmed the `/media` rewrite fix with a live 200 response; confirmed the broken-image
+investigation above end-to-end including the fix. `npm run lint` and `npm run build` both clean
+(65 routes built). No RLS-relevant change this stage — `rls_test.sql` not rerun.
 
 ---
 
-**Last updated**: 2026-09-17
-**Status**: Stages 1-13 complete. Stage 14 next.
+## Stages 15–16
+
+Detailed only once reached — see `docs/REAK-requirements.md` for the full scope of each. Will be
+broken into their own plan sections as they start, each with its own daily-log entry and test
+results, per the spec's own recommended execution approach (§37 of the original PDF, reproduced in
+the "Process note" of `docs/REAK-requirements.md` §2.6).
+
+---
+
+**Last updated**: 2026-09-18
+**Status**: Stages 1-14 complete. Stage 15 next.

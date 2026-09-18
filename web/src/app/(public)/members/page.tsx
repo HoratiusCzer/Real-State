@@ -6,7 +6,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
 
-export const metadata: Metadata = { title: "Members" };
+export const metadata: Metadata = { title: "Members", alternates: { canonical: "/members" } };
 
 export default async function MembersPage() {
   const result = await publicContentApi.listMembers();

@@ -7,7 +7,7 @@ import { Pagination } from "@/components/ui/pagination";
 import { EmptyState } from "@/components/ui/empty-state";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
 
-export const metadata: Metadata = { title: "Properties" };
+export const metadata: Metadata = { title: "Properties", alternates: { canonical: "/properties" } };
 
 type SearchParams = Record<string, string | undefined>;
 

@@ -5,7 +5,15 @@ import { publicContentApi } from "@/lib/public-content/api";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const result = await publicContentApi.getEvent(slug);
-  return { title: result.ok ? result.data.title : "Event" };
+  if (!result.ok) return { title: "Event" };
+
+  const { title, location } = result.data;
+  return {
+    title,
+    description: location ?? undefined,
+    alternates: { canonical: `/events/${slug}` },
+    openGraph: { title, description: location ?? undefined, type: "article", url: `/events/${slug}` },
+  };
 }
 
 export default async function EventPage({ params }: { params: Promise<{ slug: string }> }) {

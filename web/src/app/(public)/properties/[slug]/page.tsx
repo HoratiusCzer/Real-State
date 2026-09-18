@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Home } from "lucide-react";
 import { publicPropertiesApi } from "@/lib/listings/api";
@@ -7,11 +8,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
 
-export const metadata: Metadata = { title: "Property" };
-
 /** REAK.Api's listings have no separate "slug" field (spec never requires one — only a
  * ReferenceCode and a UUID, unlike the CMS content types that do have Slug). This route's [slug]
  * segment is the listing's id, same as /portal/properties/[id]. */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await publicPropertiesApi.get(slug);
+  if (!result.ok) return { title: "Property" };
+
+  const p = result.data;
+  const description = `${p.propertyTypeName} for ${p.purposeName.toLowerCase()} in ${p.municipalityName}, ${p.districtName} — ${p.currencyCode} ${p.price.toLocaleString()}.`;
+  return {
+    title: p.title,
+    description,
+    alternates: { canonical: `/properties/${slug}` },
+    openGraph: { title: p.title, description, type: "website", url: `/properties/${slug}`, images: p.mediaUrls[0] ? [p.mediaUrls[0]] : undefined },
+  };
+}
+
 export default async function PropertyDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const result = await publicPropertiesApi.get(slug);
@@ -39,8 +53,9 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
       {p.mediaUrls.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {p.mediaUrls.map((url) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img key={url} src={url} alt={p.title} className="aspect-square rounded-md object-cover" />
+            <div key={url} className="relative aspect-square overflow-hidden rounded-md">
+              <Image src={url} alt={p.title} fill sizes="(max-width: 640px) 50vw, 33vw" className="object-cover" />
+            </div>
           ))}
         </div>
       ) : null}

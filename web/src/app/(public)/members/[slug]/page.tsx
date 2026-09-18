@@ -4,10 +4,22 @@ import { Building2, Globe } from "lucide-react";
 import { publicContentApi } from "@/lib/public-content/api";
 import { Card, CardContent } from "@/components/ui/card";
 
-export const metadata: Metadata = { title: "Member profile" };
-
 /** MemberEntity has no separate Slug column (same reasoning as /properties/[slug] — see that
  * route's comment) — this [slug] segment is the organization's id. */
+export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+  const { slug } = await params;
+  const result = await publicContentApi.getMember(slug);
+  if (!result.ok) return { title: "Member profile" };
+
+  const { name, description } = result.data;
+  return {
+    title: name,
+    description: description ?? undefined,
+    alternates: { canonical: `/members/${slug}` },
+    openGraph: { title: name, description: description ?? undefined, type: "website", url: `/members/${slug}` },
+  };
+}
+
 export default async function MemberProfilePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const result = await publicContentApi.getMember(slug);

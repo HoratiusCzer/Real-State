@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { CmsPageContent } from "@/components/marketing/cms-page-content";
 
-export const metadata: Metadata = { title: "About" };
+export const metadata: Metadata = { title: "About", alternates: { canonical: "/about" } };
 
 export default function AboutPage() {
   return (

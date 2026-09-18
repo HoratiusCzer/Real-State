@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Bell, CalendarDays, Newspaper } from "lucide-react";
 import { Hero } from "@/components/marketing/hero";
 import { IntroSection } from "@/components/marketing/intro-section";
@@ -11,6 +12,8 @@ import { MembershipCta } from "@/components/marketing/membership-cta";
 import { PublicPropertiesSection } from "@/components/marketing/public-properties-section";
 import { ContactCta } from "@/components/marketing/contact-cta";
 import { publicContentApi } from "@/lib/public-content/api";
+
+export const metadata: Metadata = { alternates: { canonical: "/" } };
 
 export default async function HomePage() {
   const [newsResult, noticesResult, eventsResult] = await Promise.all([

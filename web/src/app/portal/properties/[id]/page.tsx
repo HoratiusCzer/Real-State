@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Bookmark, BookmarkCheck, FileText, Trash2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -71,13 +72,12 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
       {listing.media.length > 0 ? (
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {listing.media.map((m) => (
-            <div key={m.id} className="relative">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.url} alt={m.caption ?? listing.title} className="aspect-square rounded-md object-cover" />
+            <div key={m.id} className="relative aspect-square overflow-hidden rounded-md">
+              <Image src={m.url} alt={m.caption ?? listing.title} fill sizes="(max-width: 640px) 50vw, 25vw" className="object-cover" />
               {listing.isOwner ? (
                 <form action={deleteMediaAction.bind(null, id, m.id)} className="absolute right-1 top-1">
-                  <SubmitButton variant="destructive" size="sm" className="h-7 px-2">
-                    <Trash2 className="h-3 w-3" />
+                  <SubmitButton variant="destructive" size="sm" className="h-7 px-2" aria-label="Delete photo">
+                    <Trash2 className="h-3 w-3" aria-hidden="true" />
                   </SubmitButton>
                 </form>
               ) : null}
@@ -156,11 +156,13 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
                   {d.documentType ?? "Document"}
                 </span>
                 <div className="flex items-center gap-2">
-                  <Button href={`/api/listings/${id}/documents/${d.id}/download`} variant="ghost" size="sm">
+                  <Button href={`/api/portal/listings/${id}/documents/${d.id}/download`} variant="ghost" size="sm">
                     Download
                   </Button>
                   <form action={deleteDocumentAction.bind(null, id, d.id)}>
-                    <SubmitButton variant="ghost" size="sm"><Trash2 className="h-4 w-4" /></SubmitButton>
+                    <SubmitButton variant="ghost" size="sm" aria-label="Delete document">
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </SubmitButton>
                   </form>
                 </div>
               </div>

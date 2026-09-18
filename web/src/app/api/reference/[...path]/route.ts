@@ -15,7 +15,15 @@ const API_BASE = process.env.REAK_API_URL ?? "http://localhost:5080";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
   const search = request.nextUrl.search;
-  const res = await fetch(`${API_BASE}/api/reference/${path.join("/")}${search}`, { cache: "no-store" });
+  // Same reasoning as lib/listings/reference-api.ts's REFERENCE_DATA_REVALIDATE_SECONDS: this
+  // data is admin-managed and changes rarely, so both the Next.js server's own fetch and the
+  // browser's cache of this route's response are allowed to reuse a result for up to an hour
+  // (spec §25 "caching where appropriate") — meaningful here since the wizard's cascading
+  // dropdowns can re-request the same province's districts repeatedly within one session.
+  const res = await fetch(`${API_BASE}/api/reference/${path.join("/")}${search}`, { next: { revalidate: 3600 } });
   const body = await res.text();
-  return new NextResponse(body, { status: res.status, headers: { "Content-Type": "application/json" } });
+  return new NextResponse(body, {
+    status: res.status,
+    headers: { "Content-Type": "application/json", "Cache-Control": "private, max-age=3600" },
+  });
 }

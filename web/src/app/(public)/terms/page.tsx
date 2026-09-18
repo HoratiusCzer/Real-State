@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Scale } from "lucide-react";
 import { CmsPageContent } from "@/components/marketing/cms-page-content";
 
-export const metadata: Metadata = { title: "Terms of use" };
+export const metadata: Metadata = { title: "Terms of use", alternates: { canonical: "/terms" } };
 
 export default function TermsPage() {
   return (

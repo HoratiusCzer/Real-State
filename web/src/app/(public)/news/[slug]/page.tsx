@@ -5,7 +5,15 @@ import { publicContentApi } from "@/lib/public-content/api";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const result = await publicContentApi.getNews(slug);
-  return { title: result.ok ? result.data.title : "News article" };
+  if (!result.ok) return { title: "News article" };
+
+  const { title, summary } = result.data;
+  return {
+    title,
+    description: summary ?? undefined,
+    alternates: { canonical: `/news/${slug}` },
+    openGraph: { title, description: summary ?? undefined, type: "article", url: `/news/${slug}` },
+  };
 }
 
 export default async function NewsArticlePage({ params }: { params: Promise<{ slug: string }> }) {

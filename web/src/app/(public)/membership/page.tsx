@@ -3,7 +3,7 @@ import { Handshake } from "lucide-react";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "Membership" };
+export const metadata: Metadata = { title: "Membership", alternates: { canonical: "/membership" } };
 
 export default function MembershipPage() {
   return (

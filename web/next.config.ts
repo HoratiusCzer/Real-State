@@ -18,6 +18,17 @@ const nextConfig: NextConfig = {
   async headers() {
     return [{ source: "/:path*", headers: securityHeaders }];
   },
+  // REAK.Api's IFileStorage.GetPublicUrl() returns a relative "/media/<file>" path (by design —
+  // it has no opinion on what origin ultimately serves it). Rendered directly as an <img src>,
+  // that path resolves against *this* app's origin, not the API's — a real bug, caught here by
+  // tracing the code rather than in a browser (this environment has none), and the reason listing
+  // photos would 404 for every real visitor until now. This rewrite proxies it through
+  // server-side, the same "browser never talks to the API's raw origin" pattern every other proxy
+  // route in this app already uses — never a client-side redirect, so REAK_API_URL is never
+  // exposed to the browser.
+  async rewrites() {
+    return [{ source: "/media/:path*", destination: `${process.env.REAK_API_URL ?? "http://localhost:5080"}/media/:path*` }];
+  },
 };
 
 export default nextConfig;

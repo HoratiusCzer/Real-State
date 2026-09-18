@@ -5,7 +5,7 @@ import { publicContentApi } from "@/lib/public-content/api";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export const metadata: Metadata = { title: "Notices" };
+export const metadata: Metadata = { title: "Notices", alternates: { canonical: "/notices" } };
 
 export default async function NoticesPage() {
   const result = await publicContentApi.listNotices();

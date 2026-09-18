@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { MembershipApplicationForm } from "@/components/auth/membership-application-form";
 
-export const metadata: Metadata = { title: "Apply for membership" };
+export const metadata: Metadata = { title: "Apply for membership", alternates: { canonical: "/membership/apply" } };
 
 export default function MembershipApplyPage() {
   return (

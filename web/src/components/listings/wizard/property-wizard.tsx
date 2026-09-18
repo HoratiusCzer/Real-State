@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import { Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
@@ -409,9 +410,10 @@ export function PropertyWizard() {
             <input type="file" accept="image/jpeg,image/png,image/webp" multiple onChange={(e) => handleUploadMedia(e.target.files)} />
             {uploadProgress !== null ? <p className="text-sm text-muted-foreground">Uploading… {uploadProgress}%</p> : null}
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-              {media.map((m) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={m.id} src={m.url} alt="" className="aspect-square rounded-md object-cover" />
+              {media.map((m, i) => (
+                <div key={m.id} className="relative aspect-square overflow-hidden rounded-md">
+                  <Image src={m.url} alt={`Uploaded photo ${i + 1}`} fill sizes="(max-width: 640px) 33vw, 25vw" className="object-cover" />
+                </div>
               ))}
             </div>
           </div>

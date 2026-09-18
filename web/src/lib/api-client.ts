@@ -11,7 +11,8 @@ async function request<T>(
   method: "GET" | "POST" | "PATCH" | "PUT" | "DELETE",
   path: string,
   body: unknown | undefined,
-  accessToken: string | undefined
+  accessToken: string | undefined,
+  revalidateSeconds?: number
 ): Promise<ApiResult<T>> {
   const res = await fetch(`${API_BASE}${path}`, {
     method,
@@ -20,7 +21,12 @@ async function request<T>(
       ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
-    cache: "no-store",
+    // Every caller defaults to no-store — the vast majority of what this client fetches is
+    // per-user/per-org data (dashboards, listings, notifications) where staleness would be a real
+    // bug, not a performance win. revalidateSeconds is an explicit opt-in for the rare case
+    // (public reference/taxonomy data — spec §25 "caching where appropriate") where the data is
+    // genuinely slow-changing and shared across every caller.
+    ...(revalidateSeconds !== undefined ? { next: { revalidate: revalidateSeconds } } : { cache: "no-store" as const }),
   });
 
   if (res.status === 204) {
@@ -49,7 +55,8 @@ async function request<T>(
   return { ok: true, data: payload as T };
 }
 
-export const apiGet = <T>(path: string, accessToken?: string) => request<T>("GET", path, undefined, accessToken);
+export const apiGet = <T>(path: string, accessToken?: string, revalidateSeconds?: number) =>
+  request<T>("GET", path, undefined, accessToken, revalidateSeconds);
 export const apiPost = <T>(path: string, body: unknown, accessToken?: string) => request<T>("POST", path, body, accessToken);
 export const apiPatch = <T>(path: string, body: unknown, accessToken?: string) => request<T>("PATCH", path, body, accessToken);
 export const apiPut = <T>(path: string, body: unknown, accessToken?: string) => request<T>("PUT", path, body, accessToken);

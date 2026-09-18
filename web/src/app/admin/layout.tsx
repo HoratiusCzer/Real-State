@@ -22,12 +22,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   return (
     <div className="flex min-h-svh flex-col">
       <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-4 py-3 sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 py-3 sm:px-6 lg:px-8">
           <Link href="/admin" className="font-heading text-lg font-bold text-foreground">
             REAK <span className="text-muted-foreground font-normal">Admin Portal</span>
           </Link>
           <div className="flex items-center gap-4">
-            <div className="text-right text-sm leading-tight">
+            <div className="hidden text-right text-sm leading-tight sm:block">
               <p className="font-medium text-foreground">{user.profile.fullName}</p>
               <p className="text-muted-foreground">{user.profile.email}</p>
             </div>
@@ -43,8 +43,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-7xl flex-1 gap-8 px-4 py-8 sm:px-6 lg:px-8">
-        <aside className="w-60 shrink-0">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 px-4 py-6 sm:px-6 md:flex-row md:gap-8 md:py-8 lg:px-8">
+        <aside className="w-full shrink-0 md:w-60">
           <AdminSidebar />
         </aside>
         <main className="min-w-0 flex-1">{children}</main>

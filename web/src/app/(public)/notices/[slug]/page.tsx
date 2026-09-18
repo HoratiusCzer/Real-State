@@ -5,7 +5,14 @@ import { publicContentApi } from "@/lib/public-content/api";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const result = await publicContentApi.getNotice(slug);
-  return { title: result.ok ? result.data.title : "Notice" };
+  if (!result.ok) return { title: "Notice" };
+
+  const { title } = result.data;
+  return {
+    title,
+    alternates: { canonical: `/notices/${slug}` },
+    openGraph: { title, type: "article", url: `/notices/${slug}` },
+  };
 }
 
 export default async function NoticePage({ params }: { params: Promise<{ slug: string }> }) {

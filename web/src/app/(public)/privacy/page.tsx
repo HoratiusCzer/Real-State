@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Scale } from "lucide-react";
 import { CmsPageContent } from "@/components/marketing/cms-page-content";
 
-export const metadata: Metadata = { title: "Privacy policy" };
+export const metadata: Metadata = { title: "Privacy policy", alternates: { canonical: "/privacy" } };
 
 export default function PrivacyPage() {
   return (

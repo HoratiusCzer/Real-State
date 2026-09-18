@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { ShieldCheck } from "lucide-react";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
 
-export const metadata: Metadata = { title: "Verify a member" };
+export const metadata: Metadata = { title: "Verify a member", alternates: { canonical: "/verify-member" } };
 
 export default function VerifyMemberPage() {
   return (

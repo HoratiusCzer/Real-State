@@ -4,7 +4,7 @@ import { publicContentApi } from "@/lib/public-content/api";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
-export const metadata: Metadata = { title: "Leadership" };
+export const metadata: Metadata = { title: "Leadership", alternates: { canonical: "/leadership" } };
 
 export default async function LeadershipPage() {
   const result = await publicContentApi.listCommittee();
