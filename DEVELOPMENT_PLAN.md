@@ -1095,14 +1095,84 @@ investigation above end-to-end including the fix. `npm run lint` and `npm run bu
 
 ---
 
-## Stages 15–16
+## Stage 15 — Full Regression Testing (✅ complete)
 
-Detailed only once reached — see `docs/REAK-requirements.md` for the full scope of each. Will be
-broken into their own plan sections as they start, each with its own daily-log entry and test
-results, per the spec's own recommended execution approach (§37 of the original PDF, reproduced in
-the "Process note" of `docs/REAK-requirements.md` §2.6).
+Spec §27: the 22 numbered end-to-end scenarios plus the adversarial security-test list
+("explicitly attempt and confirm failure of..."), run live against the real running API and
+database rather than re-read from code. No source files were touched this stage — this is a pure
+verification pass, and it found **zero real defects**. Every failure hit along the way traced back
+to a mistake in the test's own request payload, self-corrected in the same session (see below).
+
+**Fresh end-to-end chain (spec Flow A, scenarios 1-4)**: submitted a brand-new membership
+application → approved it as `assoc-admin@example.test` (a real seeded SuperAdmin, found via
+`ProfileRoleAssignments`/`Roles.Scope`, not a flat `IsSystemAdmin` column) → invited a user to the
+newly created org → accepted the invitation and set a password → logged in as that brand-new
+account. All four steps worked on the first real attempt.
+
+**Property + demand + matching + collaboration chain (scenarios 5-19)**: created a listing as the
+new user, confirmed persistence, edited it, submitted/auto-approved it (`property_moderation_
+required` is off), set `AllMembers` visibility, and confirmed a different org
+(`kathmandu-prime@example.test`) could read it (`isOwner: false`) while its private contact stayed
+null until explicit disclosure. Created a matching demand from a third org
+(`pokhara-lakeside@example.test`), published it, and got a live 100%-score match against the new
+listing with a per-criterion explanation (`detailText` strings, e.g. "Within the requirement's
+budget range"). Sent a collaboration request from that match, accepted it as the listing owner,
+opened the resulting workspace as both participants, confirmed an uninvolved third org got a 404
+trying to open it, confirmed the listing contact stayed hidden from the collaborator until an
+explicit `POST .../contact-disclosures` call, then confirmed it unlocked correctly afterward.
+
+**Suspension, feature flags, CMS (scenarios 20-22)**: first attempt at "suspend a user" used the
+wrong lever (`MemberEntitiesController.Suspend`, which — per its own code comment — deliberately
+only hides an org from the directory and does *not* touch member accounts, a separate lever from
+`ProfilesController.Suspend` by design). Re-ran against the correct endpoint: existing tokens and
+fresh logins were both correctly rejected (401) within the same request cycle, confirming
+`ActiveProfileMiddleware` really does re-check `Profile.IsActive` per-request, not just at login.
+Toggled `public_properties_enabled` off→on→off against a real listing and confirmed the public API
+correctly hid/showed it at each step. Created a CMS news article, confirmed it 404s publicly as
+Draft, confirmed the API enforces the Draft→Review→Published workflow (a direct Draft→Published
+PATCH is correctly rejected), and confirmed it appears on the public endpoint once actually
+Published.
+
+**Security tests (spec §27's "attempt and confirm failure of" list)** — all 12 items tested
+directly against the API, all correctly blocked: cross-org listing edit/delete (403), cross-org
+demand modification (404), reading another org's private contact or private document as a
+non-collaborator (null fields / 403), accessing a collaboration without being a participant (404),
+hitting admin-only routes (`/api/reports/summary`, feature-flag writes) as an ordinary member
+(403), and calling a feature-gated endpoint directly while its flag is off — e.g. `POST
+/api/membership-applications` with `membership_application_enabled` flipped off returns a real
+400, not just a hidden UI button, confirming server-side enforcement rather than
+frontend-only gating. "Modifying roles" / "granting permissions without authorization" is the
+strongest case of all: there is no mutation endpoint for `Roles`/`RolePermissions` in the API at
+all (the admin Roles & Permissions screen is explicitly read-only, per its own on-page copy — the
+matrix is only ever changed via `DatabaseSeeder.cs`), so this isn't merely permission-blocked, it's
+structurally impossible over HTTP for anyone, admin included.
+
+**RLS reran and expanded on**: `rls_test.sql`'s 11 assertions (owner/outsider/network-share/
+hostile-delete/anonymous/public-once-shared, contact-privacy at every stage) all passed cleanly —
+same result as every prior stage, no regression from this session's heavy cross-org exercise.
+
+**Mistakes made and self-corrected during testing** (none were product bugs): enum request fields
+(`NetworkVisibility`, `ContactDataType`, `ContentStatus`) needed numeric values, not strings — this
+API has no `JsonStringEnumConverter` registered, unlike the response DTOs which expose enums as
+plain pre-stringified `string` fields; the contact-update DTO uses `Phone`/`Email`, not
+`ContactPhone`/`ContactEmail`; the contact-disclosure DTO is a single `DataType` enum field, not a
+name/phone/email bundle; the public-content route prefix is `/api/public`, not
+`/api/public-content`. Each was caught immediately by reading the actual DTO/controller source
+rather than guessing twice.
+
+Test fixtures created this stage (`Stage15 Regression Realty` org, its listing/demand/
+collaboration/news article, `stage15-regression@example.test`) were left in place rather than
+cleaned up, matching this project's established convention of keeping prior stages' QA fixtures
+live in the dev database (e.g. `stage10-test@example.test`, `assoc-admin@example.test`).
+
+---
+
+## Stage 16
+
+Detailed only once reached — see `docs/REAK-requirements.md` §34 (Production Readiness Checklist)
+and §36 (Final Report Format) for its scope.
 
 ---
 
 **Last updated**: 2026-09-18
-**Status**: Stages 1-14 complete. Stage 15 next.
+**Status**: Stages 1-15 complete. Stage 16 next.
