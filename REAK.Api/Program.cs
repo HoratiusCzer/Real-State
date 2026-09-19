@@ -1,10 +1,12 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.OpenApi;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi;
 using REAK.Api.Data;
 using REAK.Api.Services.Audit;
 using REAK.Api.Services.Auth;
@@ -32,7 +34,7 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "REAK.Clients";
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<BearerSecuritySchemeTransformer>());
 
 builder.Services.AddScoped<SessionContextOverride>();
 builder.Services.AddScoped<SessionContextConnectionInterceptor>();
@@ -118,7 +120,17 @@ using (var scope = app.Services.CreateScope())
 
 if (app.Environment.IsDevelopment())
 {
+    // JSON document (Microsoft.AspNetCore.OpenApi, already dev-only before this change) plus a
+    // browsable UI on top of it (Swashbuckle.AspNetCore.SwaggerUI — UI only, no separate document
+    // generator; it just renders the document MapOpenApi() already produces at /openapi/v1.json).
+    // No production Swagger config exists anywhere in this project, so this stays inside the same
+    // IsDevelopment() gate as MapOpenApi() rather than introducing a new one.
     app.MapOpenApi();
+    app.UseSwaggerUI(options =>
+    {
+        options.SwaggerEndpoint("/openapi/v1.json", "REAK.Api");
+        options.RoutePrefix = "swagger";
+    });
 }
 
 if (!app.Environment.IsDevelopment())
@@ -171,3 +183,33 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+/// <summary>Adds a "Bearer" security scheme to the generated OpenAPI document (dev-only, see
+/// above) so Swagger UI shows an "Authorize" button — paste an access token from
+/// POST /api/auth/login there and every "Try it out" call carries it. This only affects the
+/// OpenAPI document's metadata, not [Authorize]/[RequirePermission]/RLS — the same authentication
+/// and authorization this API already enforces on every request either way.</summary>
+internal sealed class BearerSecuritySchemeTransformer : IOpenApiDocumentTransformer
+{
+    public Task TransformAsync(OpenApiDocument document, OpenApiDocumentTransformerContext context, CancellationToken cancellationToken)
+    {
+        document.Components ??= new OpenApiComponents();
+        document.Components.SecuritySchemes ??= new Dictionary<string, IOpenApiSecurityScheme>();
+        document.Components.SecuritySchemes["Bearer"] = new OpenApiSecurityScheme
+        {
+            Type = SecuritySchemeType.Http,
+            Scheme = "bearer",
+            BearerFormat = "JWT",
+            In = ParameterLocation.Header,
+            Description = "Paste the accessToken from POST /api/auth/login (no \"Bearer \" prefix needed).",
+        };
+
+        document.Security ??= [];
+        document.Security.Add(new OpenApiSecurityRequirement
+        {
+            [new OpenApiSecuritySchemeReference("Bearer", document, null)] = [],
+        });
+
+        return Task.CompletedTask;
+    }
+}
