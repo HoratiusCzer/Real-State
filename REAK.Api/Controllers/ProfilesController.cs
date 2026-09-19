@@ -16,12 +16,28 @@ namespace REAK.Api.Controllers;
 public class ProfilesController(ReakDbContext db, IAuditLogService auditLogService) : ControllerBase
 {
     /// <summary>Admin Portal "users" list (Stage 11, spec §4.3) — every profile, regardless of
-    /// which org(s) it belongs to or none at all, so an admin can find and suspend anyone.</summary>
+    /// which org(s) it belongs to or none at all, so an admin can find and suspend anyone. Only a
+    /// system admin gets that unscoped view, though: members.read is also granted to the ordinary
+    /// org-scoped MemberAdmin role, and without this check that role could list every user across
+    /// every organization, not just its own — the same "permission slug alone isn't enough" gap
+    /// MemberEntitiesController.Update already guards against for org updates.</summary>
     [HttpGet]
     [RequirePermission("members.read")]
     public async Task<IActionResult> List([FromQuery] string? search, CancellationToken ct)
     {
+        var isSystemAdmin = User.HasClaim(ClaimsNames.IsSystemAdmin, "true");
         var query = db.Profiles.AsQueryable();
+
+        if (!isSystemAdmin)
+        {
+            var profileId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+            var myEntityIds = await db.EntityUsers
+                .Where(e => e.ProfileId == profileId && e.IsActive)
+                .Select(e => e.MemberEntityId)
+                .ToListAsync(ct);
+            query = query.Where(p => p.EntityMemberships.Any(m => m.IsActive && myEntityIds.Contains(m.MemberEntityId)));
+        }
+
         if (!string.IsNullOrWhiteSpace(search))
         {
             query = query.Where(p => p.Email.Contains(search) || p.FullName.Contains(search));
