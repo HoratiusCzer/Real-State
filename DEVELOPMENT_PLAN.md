@@ -1167,12 +1167,50 @@ live in the dev database (e.g. `stage10-test@example.test`, `assoc-admin@example
 
 ---
 
-## Stage 16
+## Stage 16 — Documentation + Production Readiness (✅ complete)
 
-Detailed only once reached — see `docs/REAK-requirements.md` §34 (Production Readiness Checklist)
-and §36 (Final Report Format) for its scope.
+The capstone stage: spec §32 (Documentation), §34 (Production Readiness Checklist), and §36
+(Final Report Format). No application code changed this stage — pure documentation and audit,
+built from facts gathered live against the running app/database rather than assumed.
+
+**Documentation set written** (spec §32's 11 required topics, consolidated into 9 files): root
+`README.md` (overview, stack, quick start, dev instructions, doc index — covers environment docs
+and setup/development instructions together); `docs/ARCHITECTURE.md`; `docs/DATABASE.md`;
+`docs/AUTHENTICATION.md`; `docs/SECURITY.md`; `docs/API.md` (full route reference for all 21
+controllers, extracted directly from the controller source rather than written from memory);
+`docs/DEPLOYMENT.md`; `docs/TESTING.md`; `docs/PRODUCTION-BUILD-REPORT.md` (the spec §36 final
+report itself). Every fact in them — table counts, index counts, RLS predicate/table counts, role/
+permission counts, migration list, route list — was pulled live from the database and source
+rather than recalled from earlier-stage memory, to avoid documenting stale or assumed state:
+61 application tables, 6 migrations (a deliberate upfront-schema design from Stage 3, not a
+migration-discipline gap — genuinely new needs in later stages, like `SavedListings`, got their
+own dedicated migrations), 186 indexes, 9 RLS predicate functions across 13 RLS-enabled tables,
+4 roles/18 permissions, 77 frontend routes.
+
+**Production readiness checklist (§34)** — audited category by category using facts already
+verified live in Stages 13-15 rather than re-running everything from scratch: frontend build/lint
+clean, backend validation/authorization/logging in place, RLS/indexes/constraints confirmed live
+via direct database queries this stage, security controls (RLS, tenant isolation, PII isolation,
+audit logging, rate limiting) all verified in Stage 15's adversarial pass, E2E/security testing
+complete, performance checked qualitatively (no formal benchmarking — documented as a limitation,
+not glossed over).
+
+**The Final Report's verdict is NOT READY FOR PRODUCTION**, with five explicit blockers: no
+automated unit/integration test suite (spec §27 requires it as a distinct category from E2E/
+security, and none exists — every prior stage's "testing" was a live manual pass against the real
+running app, not repeatable automated code); no email-delivery integration (invitation/
+password-reset tokens are generated and stored correctly but nothing sends them); never deployed
+outside local dev infrastructure; REAK's own business configuration (branding, committee/contact
+info, an approved — not QA-default — matching rule set) still placeholder; no load/performance
+benchmarking. None of these are functional defects — every one of spec §27's 22 E2E scenarios and
+12 security tests passes live, RLS is clean, and the app works end-to-end. This is a case where
+being honest about what "done" actually means (per this project's practice throughout: disclosing
+the `resize_window` limitation, the stub-test-image investigation, etc., rather than claiming more
+than was verified) produces a more useful report than declaring victory on a checklist that
+excludes real gaps.
 
 ---
 
 **Last updated**: 2026-09-18
-**Status**: Stages 1-15 complete. Stage 16 next.
+**Status**: All 16 stages complete. Final verdict: **NOT READY FOR PRODUCTION** — see
+`docs/PRODUCTION-BUILD-REPORT.md` for the full report and explicit blockers.
