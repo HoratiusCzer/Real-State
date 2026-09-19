@@ -11,8 +11,11 @@ namespace REAK.Api.Services.Auth;
 /// <summary>Flow A steps 3-5 (spec §2.4): admin creates an invitation, invitee accepts (setting a
 /// password if they're a brand-new profile), and an EntityUser row links them to their member
 /// organization with the granted role.</summary>
-public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender, INotificationService notificationService, IAuditLogService auditLogService) : IInvitationService
+public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher, IEmailSender emailSender, INotificationService notificationService, IAuditLogService auditLogService, IConfiguration configuration) : IInvitationService
 {
+    private readonly string _frontendBaseUrl = (configuration["REAK_FRONTEND_BASE_URL"] ?? "http://localhost:3000").TrimEnd('/');
+
+
     public async Task<Invitation> CreateAsync(string email, Guid? memberEntityId, Guid roleId, Guid invitedByProfileId, CancellationToken ct = default)
     {
         var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == roleId, ct)
@@ -43,11 +46,12 @@ public class InvitationService(ReakDbContext db, IPasswordHasher passwordHasher,
             ? null
             : await db.MemberEntities.Where(m => m.Id == memberEntityId).Select(m => m.Name).FirstOrDefaultAsync(ct);
 
+        var invitationLink = $"{_frontendBaseUrl}/invite/{invitation.Token}";
         await emailSender.SendAsync(
             email,
             "You've been invited to join REAK",
             $"You've been invited to join{(memberEntityName is null ? "" : $" {memberEntityName} on")} REAK as {role.Name}. " +
-            $"Invitation token: {invitation.Token} (expires {invitation.ExpiresAt:u}).",
+            $"Accept your invitation: {invitationLink} (expires {invitation.ExpiresAt:u}).",
             ct);
 
         return invitation;

@@ -10,7 +10,7 @@ public record StoredFile(string StoragePath, long SizeBytes);
 /// statically served; every read goes through ListingsController's authenticated download action.
 ///
 /// LocalDiskFileStorage is a dev-only placeholder — swap for real object storage (S3/Azure Blob)
-/// before production (spec §34), same pattern as LoggingEmailSender.</summary>
+/// before production (spec §34).</summary>
 public interface IFileStorage
 {
     Task<StoredFile> SaveAsync(string container, string fileName, Stream content, CancellationToken ct = default);

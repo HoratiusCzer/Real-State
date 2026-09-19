@@ -50,7 +50,7 @@ builder.Services.AddScoped<IInvitationService, InvitationService>();
 builder.Services.AddScoped<IMembershipApplicationService, MembershipApplicationService>();
 // No email provider is configured for this project yet — logs instead of delivering. Swap for a
 // real provider (SendGrid/SES/SMTP) here before production (spec §34).
-builder.Services.AddScoped<IEmailSender, LoggingEmailSender>();
+builder.Services.AddHttpClient<IEmailSender, ResendEmailSender>();
 builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddHostedService<ExpiryScanService>();
@@ -62,7 +62,7 @@ builder.Services.AddScoped<IDemandService, DemandService>();
 builder.Services.AddScoped<ICollaborationRequestService, CollaborationRequestService>();
 builder.Services.AddScoped<ICollaborationWorkspaceService, CollaborationWorkspaceService>();
 // Dev-only local-disk placeholder — swap for real object storage (S3/Azure Blob) before
-// production (spec §34), same pattern as LoggingEmailSender.
+// production (spec §34).
 builder.Services.AddSingleton<IFileStorage, LocalDiskFileStorage>();
 
 builder.Services

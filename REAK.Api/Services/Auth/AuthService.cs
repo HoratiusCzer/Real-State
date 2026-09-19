@@ -18,9 +18,11 @@ public class AuthService(
     IUserClaimsFactory claimsFactory,
     IEmailSender emailSender,
     INotificationService notificationService,
-    IAuditLogService auditLogService) : IAuthService
+    IAuditLogService auditLogService,
+    IConfiguration configuration) : IAuthService
 {
     private const int MinPasswordLength = 8;
+    private readonly string _frontendBaseUrl = (configuration["REAK_FRONTEND_BASE_URL"] ?? "http://localhost:3000").TrimEnd('/');
 
     public async Task<AuthResult> LoginAsync(string email, string password, string? ip, CancellationToken ct = default)
     {
@@ -120,10 +122,15 @@ public class AuthService(
         });
         await db.SaveChangesAsync(ct);
 
+        // The reset-password page reads its token from a query string (?token=...), not a path
+        // segment — unlike /invite/{token}, there's no [token] dynamic route here. rawToken is
+        // plain Base64 (not the URL-safe variant InvitationService's token uses), so it needs
+        // proper escaping or a stray '+'/'&' could silently corrupt the query string.
+        var resetLink = $"{_frontendBaseUrl}/reset-password?token={Uri.EscapeDataString(rawToken)}";
         await emailSender.SendAsync(
             profile.Email,
             "Reset your REAK password",
-            $"A password reset was requested for your REAK account. Reset token: {rawToken} (expires in 1 hour). If you did not request this, ignore this email.",
+            $"A password reset was requested for your REAK account. Reset your password: {resetLink} (expires in 1 hour). If you did not request this, ignore this email.",
             ct);
     }
 
