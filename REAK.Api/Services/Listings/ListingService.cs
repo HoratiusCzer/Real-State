@@ -112,6 +112,15 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             return (new ListingOp(ListingOpResult.Forbidden, "You must belong to a member organization to create a listing."), null);
         }
 
+        var referenceError = await ValidateReferencesAsync(
+            request.PropertyTypeId, request.PropertySubtypeId, request.PurposeId, request.ProvinceId,
+            request.DistrictId, request.MunicipalityId, request.WardId, request.LocalityId,
+            request.CurrencyId, request.AreaUnitId, request.AmenityIds, ct);
+        if (referenceError is not null)
+        {
+            return (new ListingOp(ListingOpResult.InvalidState, referenceError), null);
+        }
+
         var memberEntityId = caller.MemberEntityIds[0];
         var referenceCode = await referenceCodeGenerator.NextListingCodeAsync(ct);
 
@@ -187,6 +196,15 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         if (listing is null)
         {
             return new ListingOp(ListingOpResult.NotFound);
+        }
+
+        var referenceError = await ValidateReferencesAsync(
+            request.PropertyTypeId, request.PropertySubtypeId, request.PurposeId, request.ProvinceId,
+            request.DistrictId, request.MunicipalityId, request.WardId, request.LocalityId,
+            request.CurrencyId, request.AreaUnitId, amenityIds: null, ct);
+        if (referenceError is not null)
+        {
+            return new ListingOp(ListingOpResult.InvalidState, referenceError);
         }
 
         listing.Title = request.Title;
@@ -447,6 +465,38 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             .FirstAsync(ct);
 
         return dto;
+    }
+
+    /// <summary>Checks every foreign key CreateAsync/UpdateAsync accept before the entity ever
+    /// reaches SaveChangesAsync, so a dangling reference (a well-formed GUID with no matching row)
+    /// becomes a clean 400 here instead of an unhandled SQL 547 (FK constraint violation)
+    /// surfacing as a bare 500 — the same targeted, DTO-level validation approach as the
+    /// Range/EnumDataType attributes on CreateListingRequest/UpdateListingRequest, just for the
+    /// checks a data annotation can't express (existence requires a database round-trip).
+    /// amenityIds is null for UpdateAsync, which has no amenity field of its own (amenities are a
+    /// separate PUT /{id}/amenities endpoint).</summary>
+    private async Task<string?> ValidateReferencesAsync(
+        Guid propertyTypeId, Guid? propertySubtypeId, Guid purposeId, Guid provinceId, Guid districtId,
+        Guid municipalityId, Guid wardId, Guid? localityId, Guid currencyId, Guid areaUnitId,
+        IReadOnlyList<Guid>? amenityIds, CancellationToken ct)
+    {
+        if (!await db.PropertyTypes.AnyAsync(t => t.Id == propertyTypeId, ct)) return "Property type not found.";
+        if (propertySubtypeId is { } subtypeId && !await db.PropertySubtypes.AnyAsync(s => s.Id == subtypeId, ct)) return "Property subtype not found.";
+        if (!await db.Purposes.AnyAsync(p => p.Id == purposeId, ct)) return "Purpose not found.";
+        if (!await db.Provinces.AnyAsync(p => p.Id == provinceId, ct)) return "Province not found.";
+        if (!await db.Districts.AnyAsync(d => d.Id == districtId, ct)) return "District not found.";
+        if (!await db.Municipalities.AnyAsync(m => m.Id == municipalityId, ct)) return "Municipality not found.";
+        if (!await db.Wards.AnyAsync(w => w.Id == wardId, ct)) return "Ward not found.";
+        if (localityId is { } locId && !await db.Localities.AnyAsync(l => l.Id == locId, ct)) return "Locality not found.";
+        if (!await db.Currencies.AnyAsync(c => c.Id == currencyId, ct)) return "Currency not found.";
+        if (!await db.AreaUnits.AnyAsync(u => u.Id == areaUnitId, ct)) return "Area unit not found.";
+        if (amenityIds is { Count: > 0 } ids)
+        {
+            var distinctIds = ids.Distinct().ToList();
+            var matchCount = await db.Amenities.CountAsync(a => distinctIds.Contains(a.Id), ct);
+            if (matchCount != distinctIds.Count) return "One or more amenity IDs not found.";
+        }
+        return null;
     }
 
     private async Task<ListingOp> SaveGuardedAsync(CancellationToken ct)

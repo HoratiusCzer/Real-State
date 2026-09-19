@@ -5,6 +5,12 @@ namespace REAK.Api.Models.Dto;
 
 public record ListingContactInput([MaxLength(255)] string? ContactName, [MaxLength(50)] string? Phone, [MaxLength(255)] string? Email);
 
+// Range/EnumDataType bounds below mirror PropertyListings' own CHECK constraints exactly
+// (Data/Migrations/*AddDatabaseQualityCheckConstraints*) — this is the DTO-level half of
+// enforcing them; a value that fails here never reaches the database at all. LandArea's real
+// constraint is "> 0", which [Range] can't express as exclusive, so 0.01 stands in as the
+// smallest realistic unit (no REAK area unit — Ropani, Aana, sq ft, etc. — is ever legitimately
+// fractional-below-that).
 public record CreateListingRequest(
     [Required, MaxLength(500)] string Title,
     [MaxLength(4000)] string? Description,
@@ -20,26 +26,27 @@ public record CreateListingRequest(
     decimal? Latitude,
     decimal? Longitude,
     [Required] Guid CurrencyId,
-    [Required] decimal Price,
+    [Required, Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal Price,
     bool IsPriceNegotiable,
-    [Required] decimal LandArea,
-    decimal? BuiltUpArea,
+    [Required, Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal LandArea,
+    [Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal? BuiltUpArea,
     [Required] Guid AreaUnitId,
     bool HasRoadAccess,
     decimal? RoadWidthFeet,
     [MaxLength(100)] string? RoadType,
-    PropertyFacing? Facing,
-    int? Bedrooms,
-    int? Bathrooms,
-    int? Floors,
-    int? ParkingSpaces,
-    Furnishing? Furnishing,
+    [EnumDataType(typeof(PropertyFacing))] PropertyFacing? Facing,
+    [Range(0, int.MaxValue)] int? Bedrooms,
+    [Range(0, int.MaxValue)] int? Bathrooms,
+    [Range(0, int.MaxValue)] int? Floors,
+    [Range(0, int.MaxValue)] int? ParkingSpaces,
+    [EnumDataType(typeof(Furnishing))] Furnishing? Furnishing,
     [MaxLength(2000)] string? InternalNotes,
     IReadOnlyList<Guid>? AmenityIds,
     ListingContactInput? Contact,
     DateTime? ExpiresAt);
 
-// Update reuses the same shape — a full replace of every editable field.
+// Update reuses the same shape — a full replace of every editable field — and the same
+// constraint-mirroring validation as CreateListingRequest above.
 public record UpdateListingRequest(
     [Required, MaxLength(500)] string Title,
     [MaxLength(4000)] string? Description,
@@ -55,20 +62,20 @@ public record UpdateListingRequest(
     decimal? Latitude,
     decimal? Longitude,
     [Required] Guid CurrencyId,
-    [Required] decimal Price,
+    [Required, Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal Price,
     bool IsPriceNegotiable,
-    [Required] decimal LandArea,
-    decimal? BuiltUpArea,
+    [Required, Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal LandArea,
+    [Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal? BuiltUpArea,
     [Required] Guid AreaUnitId,
     bool HasRoadAccess,
     decimal? RoadWidthFeet,
     [MaxLength(100)] string? RoadType,
-    PropertyFacing? Facing,
-    int? Bedrooms,
-    int? Bathrooms,
-    int? Floors,
-    int? ParkingSpaces,
-    Furnishing? Furnishing,
+    [EnumDataType(typeof(PropertyFacing))] PropertyFacing? Facing,
+    [Range(0, int.MaxValue)] int? Bedrooms,
+    [Range(0, int.MaxValue)] int? Bathrooms,
+    [Range(0, int.MaxValue)] int? Floors,
+    [Range(0, int.MaxValue)] int? ParkingSpaces,
+    [EnumDataType(typeof(Furnishing))] Furnishing? Furnishing,
     [MaxLength(2000)] string? InternalNotes,
     DateTime? ExpiresAt);
 
