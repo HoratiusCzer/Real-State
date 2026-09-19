@@ -63,6 +63,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
     [RequirePermission("settings.manage")]
     public async Task<IActionResult> CreatePropertyType(CreatePropertyTypeRequest request, CancellationToken ct)
     {
+        if (await db.PropertyTypes.AnyAsync(t => t.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A property type with this name already exists." });
+        }
+
         var entity = new PropertyType { Id = Guid.NewGuid(), Name = request.Name };
         db.PropertyTypes.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -77,6 +82,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
         if (!await db.PropertyTypes.AnyAsync(t => t.Id == request.PropertyTypeId, ct))
         {
             return BadRequest(new { error = "Property type not found." });
+        }
+
+        if (await db.PropertySubtypes.AnyAsync(s => s.PropertyTypeId == request.PropertyTypeId && s.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A subtype with this name already exists for this property type." });
         }
 
         var entity = new PropertySubtype { Id = Guid.NewGuid(), PropertyTypeId = request.PropertyTypeId, Name = request.Name };
@@ -102,6 +112,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
     [RequirePermission("settings.manage")]
     public async Task<IActionResult> CreatePurpose(CreatePurposeRequest request, CancellationToken ct)
     {
+        if (await db.Purposes.AnyAsync(p => p.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A purpose with this name already exists." });
+        }
+
         var entity = new Purpose { Id = Guid.NewGuid(), Name = request.Name };
         db.Purposes.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -125,6 +140,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
     [RequirePermission("settings.manage")]
     public async Task<IActionResult> CreateAmenity(CreateAmenityRequest request, CancellationToken ct)
     {
+        if (await db.Amenities.AnyAsync(a => a.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "An amenity with this name already exists." });
+        }
+
         var entity = new Amenity { Id = Guid.NewGuid(), Name = request.Name };
         db.Amenities.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -188,6 +208,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
             return BadRequest(new { error = "Province not found." });
         }
 
+        if (await db.Districts.AnyAsync(d => d.ProvinceId == request.ProvinceId && d.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A district with this name already exists in this province." });
+        }
+
         var entity = new District { Id = Guid.NewGuid(), ProvinceId = request.ProvinceId, Name = request.Name };
         db.Districts.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -214,6 +239,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
         if (!await db.Districts.AnyAsync(d => d.Id == request.DistrictId, ct))
         {
             return BadRequest(new { error = "District not found." });
+        }
+
+        if (await db.Municipalities.AnyAsync(m => m.DistrictId == request.DistrictId && m.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A municipality with this name already exists in this district." });
         }
 
         var entity = new Municipality { Id = Guid.NewGuid(), DistrictId = request.DistrictId, Name = request.Name };
@@ -244,6 +274,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
             return BadRequest(new { error = "Municipality not found." });
         }
 
+        if (await db.Wards.AnyAsync(w => w.MunicipalityId == request.MunicipalityId && w.Number == request.Number, ct))
+        {
+            return BadRequest(new { error = "This ward number already exists in this municipality." });
+        }
+
         var entity = new Ward { Id = Guid.NewGuid(), MunicipalityId = request.MunicipalityId, Number = request.Number };
         db.Wards.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -270,6 +305,11 @@ public class ReferenceDataController(ReakDbContext db) : ControllerBase
         if (!await db.Wards.AnyAsync(w => w.Id == request.WardId, ct))
         {
             return BadRequest(new { error = "Ward not found." });
+        }
+
+        if (await db.Localities.AnyAsync(l => l.WardId == request.WardId && l.Name == request.Name, ct))
+        {
+            return BadRequest(new { error = "A locality with this name already exists in this ward." });
         }
 
         var entity = new Locality { Id = Guid.NewGuid(), WardId = request.WardId, Name = request.Name };
