@@ -17,13 +17,29 @@ public class InvitationsController(IInvitationService invitationService, ReakDbC
 {
     /// <summary>Admin Portal invitation queue (Stage 11) — everyone who was ever invited, newest
     /// first, so an admin can see what's pending/accepted/expired/revoked without hunting through
-    /// individual member org pages.</summary>
+    /// individual member org pages. A system admin gets that full queue; an ordinary org-scoped
+    /// MemberAdmin (who also holds members.read, for the invite-role-picker) only sees invitations
+    /// for the org(s) they administer — same "permission slug alone isn't enough" gap already
+    /// guarded against in ProfilesController.List and MemberEntitiesController.Update.</summary>
     [HttpGet]
     [Authorize]
     [RequirePermission("members.read")]
     public async Task<IActionResult> List(CancellationToken ct)
     {
-        var invitations = await db.Invitations
+        var isSystemAdmin = User.HasClaim(ClaimsNames.IsSystemAdmin, "true");
+        var query = db.Invitations.AsQueryable();
+
+        if (!isSystemAdmin)
+        {
+            var profileId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+            var myEntityIds = await db.ProfileRoleAssignments
+                .Where(a => a.ProfileId == profileId && a.Role.Name == "MemberAdmin" && a.MemberEntityId != null)
+                .Select(a => a.MemberEntityId!.Value)
+                .ToListAsync(ct);
+            query = query.Where(i => i.MemberEntityId != null && myEntityIds.Contains(i.MemberEntityId.Value));
+        }
+
+        var invitations = await query
             .OrderByDescending(i => i.CreatedAt)
             .Select(i => new
             {

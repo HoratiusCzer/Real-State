@@ -31,12 +31,17 @@ public class MembershipApplicationsController(IMembershipApplicationService appl
     }
 
     /// <summary>Admin review queue. Full admin UI is Stage 11 (Admin Portal) — this is the API
-    /// surface needed to exercise Flow A end-to-end now.</summary>
+    /// surface needed to exercise Flow A end-to-end now. Applications belong to no organization
+    /// yet (that's the point — they're pre-approval), so unlike other members.read-gated
+    /// endpoints there's no org to scope an ordinary MemberAdmin *to*; this is admin-only,
+    /// full stop, same as ReportsController/AuditLogsController/FeatureFlagsController.</summary>
     [HttpGet]
     [Authorize]
     [RequirePermission("members.read")]
     public async Task<IActionResult> List([FromQuery] string? status, CancellationToken ct)
     {
+        if (!User.HasClaim(ClaimsNames.IsSystemAdmin, "true")) return Forbid();
+
         var query = db.MembershipApplications.AsQueryable();
         if (!string.IsNullOrWhiteSpace(status) && Enum.TryParse<Models.Enums.MembershipApplicationStatus>(status, true, out var parsed))
         {
