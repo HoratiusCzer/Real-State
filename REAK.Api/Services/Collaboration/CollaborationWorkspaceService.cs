@@ -63,6 +63,15 @@ public class CollaborationWorkspaceService(ReakDbContext db, SessionContextOverr
                 d.GrantedAt, d.RevokedAt, d.PolicyVersion)).ToList());
     }
 
+    /// <summary>Shared existence/visibility check for the six list endpoints below, which
+    /// otherwise have no way to tell "workspace exists but has no items yet" apart from "caller
+    /// isn't a participant" — both look like an empty list. Reuses CollaborationWorkspaces' own
+    /// RLS predicate (the same mechanism GetAsync's null-check already relies on) rather than
+    /// introducing a new authorization rule: a non-participant's query for this row returns no
+    /// rows, same as everywhere else in this service.</summary>
+    public Task<bool> WorkspaceVisibleAsync(Guid workspaceId, CancellationToken ct = default) =>
+        db.CollaborationWorkspaces.AnyAsync(w => w.Id == workspaceId, ct);
+
     public async Task<List<CollaborationMessageDto>> ListMessagesAsync(Guid workspaceId, CancellationToken ct = default) =>
         await db.CollaborationMessages.Where(m => m.CollaborationWorkspaceId == workspaceId)
             .OrderBy(m => m.CreatedAt)

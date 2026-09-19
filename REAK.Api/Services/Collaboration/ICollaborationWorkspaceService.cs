@@ -7,6 +7,7 @@ namespace REAK.Api.Services.Collaboration;
 public interface ICollaborationWorkspaceService
 {
     Task<CollaborationWorkspaceDto?> GetAsync(Guid workspaceId, CancellationToken ct = default);
+    Task<bool> WorkspaceVisibleAsync(Guid workspaceId, CancellationToken ct = default);
     Task<List<CollaborationMessageDto>> ListMessagesAsync(Guid workspaceId, CancellationToken ct = default);
     Task<CollabOp> SendMessageAsync(Guid workspaceId, CallerContext caller, string body, CancellationToken ct = default);
     Task<List<CollaborationNoteDto>> ListNotesAsync(Guid workspaceId, CancellationToken ct = default);

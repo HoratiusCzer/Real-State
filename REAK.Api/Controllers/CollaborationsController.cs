@@ -31,7 +31,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/messages")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListMessages(Guid id, CancellationToken ct) => Ok(await workspaceService.ListMessagesAsync(id, ct));
+    public async Task<IActionResult> ListMessages(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListMessagesAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/messages")]
     [RequirePermission("collaboration.create")]
@@ -44,7 +48,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/notes")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListNotes(Guid id, CancellationToken ct) => Ok(await workspaceService.ListNotesAsync(id, ct));
+    public async Task<IActionResult> ListNotes(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListNotesAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/notes")]
     [RequirePermission("collaboration.create")]
@@ -57,7 +65,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/tasks")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListTasks(Guid id, CancellationToken ct) => Ok(await workspaceService.ListTasksAsync(id, ct));
+    public async Task<IActionResult> ListTasks(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListTasksAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/tasks")]
     [RequirePermission("collaboration.create")]
@@ -78,7 +90,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/viewings")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListViewings(Guid id, CancellationToken ct) => Ok(await workspaceService.ListViewingsAsync(id, ct));
+    public async Task<IActionResult> ListViewings(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListViewingsAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/viewings")]
     [RequirePermission("collaboration.create")]
@@ -91,7 +107,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/files")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListFiles(Guid id, CancellationToken ct) => Ok(await workspaceService.ListFilesAsync(id, ct));
+    public async Task<IActionResult> ListFiles(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListFilesAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/files")]
     [RequirePermission("collaboration.create")]
@@ -141,7 +161,11 @@ public class CollaborationsController(ICollaborationWorkspaceService workspaceSe
 
     [HttpGet("{id:guid}/activities")]
     [RequirePermission("collaboration.read")]
-    public async Task<IActionResult> ListActivities(Guid id, CancellationToken ct) => Ok(await workspaceService.ListActivitiesAsync(id, ct));
+    public async Task<IActionResult> ListActivities(Guid id, CancellationToken ct)
+    {
+        if (!await workspaceService.WorkspaceVisibleAsync(id, ct)) return NotFound();
+        return Ok(await workspaceService.ListActivitiesAsync(id, ct));
+    }
 
     [HttpPost("{id:guid}/contact-disclosures")]
     [RequirePermission("collaboration.create")]
