@@ -12,7 +12,8 @@ import { FolderClock, Building2, ClipboardList, Sparkles, Handshake } from "luci
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function DashboardPage() {
-  const { accessToken } = await requireSession();
+  const { user, accessToken } = await requireSession();
+  const hasOrganization = user.memberships.length > 0;
   const result = await dashboardApi.summary(accessToken);
   const summary = result.ok
     ? result.data
@@ -72,7 +73,11 @@ export default async function DashboardPage() {
               <EmptyState
                 icon={FolderClock}
                 title="No properties yet"
-                description="Once the Property Exchange ships (Stage 6), your organization's listings will show up here."
+                description={
+                  hasOrganization
+                    ? "Create your organization's first property listing to see it here."
+                    : "Your account isn't linked to a REAK member organization, so there's nothing to show here."
+                }
               />
             )}
           </CardContent>
