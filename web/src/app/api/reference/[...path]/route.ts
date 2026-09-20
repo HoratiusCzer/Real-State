@@ -15,15 +15,17 @@ const API_BASE = process.env.REAK_API_URL ?? "http://localhost:5080";
 export async function GET(request: NextRequest, { params }: { params: Promise<{ path: string[] }> }) {
   const { path } = await params;
   const search = request.nextUrl.search;
-  // Same reasoning as lib/listings/reference-api.ts's REFERENCE_DATA_REVALIDATE_SECONDS: this
-  // data is admin-managed and changes rarely, so both the Next.js server's own fetch and the
-  // browser's cache of this route's response are allowed to reuse a result for up to an hour
-  // (spec §25 "caching where appropriate") — meaningful here since the wizard's cascading
-  // dropdowns can re-request the same province's districts repeatedly within one session.
-  const res = await fetch(`${API_BASE}/api/reference/${path.join("/")}${search}`, { next: { revalidate: 3600 } });
+  // This data is admin-editable at runtime (Admin Portal reference-data screens) — a cache here,
+  // at either the Next.js server's own fetch or the browser's cache of this route's response,
+  // means an admin's edit (e.g. adding a district) silently doesn't show up in the wizard's
+  // cascading dropdowns for up to the cache lifetime, with no error, just missing options. Always
+  // fetches fresh; the cascading dropdowns only re-request a given province/district/etc. when the
+  // caller's selection actually changes anyway (see use-reference-data.ts), so this isn't the
+  // redundant-repeat-request case caching would have helped with.
+  const res = await fetch(`${API_BASE}/api/reference/${path.join("/")}${search}`, { cache: "no-store" });
   const body = await res.text();
   return new NextResponse(body, {
     status: res.status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "private, max-age=3600" },
+    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
   });
 }

@@ -13,7 +13,12 @@ function useFetch<T>(path: string | null, initial: T): T {
       Promise.resolve().then(() => { if (!cancelled) setData(initial); });
       return () => { cancelled = true; };
     }
-    fetch(path)
+    // no-store: this data is admin-editable at runtime (Admin Portal reference-data screens) —
+    // without this, the browser's own HTTP cache would keep serving a stale cascading-dropdown
+    // list after an admin adds/edits a district, municipality, etc., with no visible error, just
+    // wrong options silently missing. The proxy route (app/api/reference/[...path]/route.ts) is
+    // fixed the same way on its own fetch to REAK.Api.
+    fetch(path, { cache: "no-store" })
       .then((r) => r.json())
       .then((d) => { if (!cancelled) setData(d); })
       .catch(() => { if (!cancelled) setData(initial); });
