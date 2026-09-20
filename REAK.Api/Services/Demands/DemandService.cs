@@ -86,6 +86,11 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
             return (new DemandOp(DemandOpResult.Forbidden, "You must belong to a member organization to register a requirement."), null);
         }
 
+        if (ValidateExpiresAt(request.ExpiresAt) is { } expiryError)
+        {
+            return (new DemandOp(DemandOpResult.InvalidState, expiryError), null);
+        }
+
         var memberEntityId = caller.MemberEntityIds[0];
         var referenceCode = await referenceCodeGenerator.NextDemandCodeAsync(ct);
 
@@ -154,6 +159,11 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
     {
         var demand = await db.Demands.FirstOrDefaultAsync(d => d.Id == id && !d.IsDeleted, ct);
         if (demand is null) return new DemandOp(DemandOpResult.NotFound);
+
+        if (ValidateExpiresAt(request.ExpiresAt) is { } expiryError)
+        {
+            return new DemandOp(DemandOpResult.InvalidState, expiryError);
+        }
 
         demand.Title = request.Title;
         demand.Description = request.Description;
@@ -418,4 +428,12 @@ public class DemandService(ReakDbContext db, IReferenceCodeGenerator referenceCo
 
     private static bool IsRlsBlockPredicateViolation(DbUpdateException ex) =>
         ex.InnerException is SqlException sqlEx && sqlEx.Message.Contains("block predicate", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>A past expiry date would create a requirement that's already stale the moment
+    /// it's saved. Needs "today" (DateTime.UtcNow), not a compile-time constant, so this can't be
+    /// expressed as a DataAnnotations attribute on CreateDemandRequest/UpdateDemandRequest.</summary>
+    private static string? ValidateExpiresAt(DateTime? expiresAt) =>
+        expiresAt is { } exp && exp.Date < DateTime.UtcNow.Date
+            ? "Expiry date can't be in the past."
+            : null;
 }

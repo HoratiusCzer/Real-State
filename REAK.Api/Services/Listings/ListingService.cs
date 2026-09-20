@@ -121,6 +121,11 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             return (new ListingOp(ListingOpResult.InvalidState, referenceError), null);
         }
 
+        if (ValidateExpiresAt(request.ExpiresAt) is { } expiryError)
+        {
+            return (new ListingOp(ListingOpResult.InvalidState, expiryError), null);
+        }
+
         var memberEntityId = caller.MemberEntityIds[0];
         var referenceCode = await referenceCodeGenerator.NextListingCodeAsync(ct);
 
@@ -205,6 +210,11 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         if (referenceError is not null)
         {
             return new ListingOp(ListingOpResult.InvalidState, referenceError);
+        }
+
+        if (ValidateExpiresAt(request.ExpiresAt) is { } expiryError)
+        {
+            return new ListingOp(ListingOpResult.InvalidState, expiryError);
         }
 
         listing.Title = request.Title;
@@ -475,6 +485,15 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
     /// checks a data annotation can't express (existence requires a database round-trip).
     /// amenityIds is null for UpdateAsync, which has no amenity field of its own (amenities are a
     /// separate PUT /{id}/amenities endpoint).</summary>
+    /// <summary>A past expiry date would create a listing that's already stale the moment it's
+    /// saved — same "DTO-level validation a data annotation can't express" reasoning as
+    /// ValidateReferencesAsync just above, since it needs "today" (DateTime.UtcNow), not a
+    /// compile-time constant.</summary>
+    private static string? ValidateExpiresAt(DateTime? expiresAt) =>
+        expiresAt is { } exp && exp.Date < DateTime.UtcNow.Date
+            ? "Expiry date can't be in the past."
+            : null;
+
     private async Task<string?> ValidateReferencesAsync(
         Guid propertyTypeId, Guid? propertySubtypeId, Guid purposeId, Guid provinceId, Guid districtId,
         Guid municipalityId, Guid wardId, Guid? localityId, Guid currencyId, Guid areaUnitId,

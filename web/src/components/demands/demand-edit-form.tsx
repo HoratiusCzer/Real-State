@@ -142,7 +142,13 @@ export function DemandEditForm({ demand, initialPropertyTypeIds }: { demand: Dem
       </Section>
 
       <Section title="Expiry">
-        <input className={inputClass} type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} />
+        <input
+          className={inputClass}
+          type="date"
+          min={new Date().toISOString().slice(0, 10)}
+          value={expiresAt}
+          onChange={(e) => setExpiresAt(e.target.value)}
+        />
       </Section>
 
       <div className="flex gap-3">

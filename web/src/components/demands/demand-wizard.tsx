@@ -328,7 +328,13 @@ export function DemandWizard() {
         {step === 8 && (
           <div>
             <Label>Expiry date (optional)</Label>
-            <input className={inputClass} type="date" value={state.expiresAt} onChange={(e) => set("expiresAt", e.target.value)} />
+            <input
+              className={inputClass}
+              type="date"
+              min={new Date().toISOString().slice(0, 10)}
+              value={state.expiresAt}
+              onChange={(e) => set("expiresAt", e.target.value)}
+            />
           </div>
         )}
 
