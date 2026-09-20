@@ -114,12 +114,14 @@ public static class DatabaseSeeder
     }
 
     /// <summary>Default role -> permission mapping. Not spec-mandated in this level of detail (the
-    /// spec gives the permission list and the four role names but not the exact grant matrix) — a
-    /// reasonable starting point, adjustable later via the Admin Portal (Stage 11).</summary>
+    /// spec gives the permission list but not the exact grant matrix) — a reasonable starting
+    /// point, adjustable later via the Admin Portal (Stage 11). Originally four roles (spec's own
+    /// wording); collapsed SuperAdmin/AssociationAdmin into one (SuperAdmin) on request, since
+    /// they held identical permissions and existed only as a naming distinction with no
+    /// behavioral difference — confusing without adding anything.</summary>
     private static readonly Dictionary<string, string[]> RolePermissionMap = new()
     {
         ["SuperAdmin"] = PermissionSlugs,
-        ["AssociationAdmin"] = PermissionSlugs,
         ["MemberAdmin"] = new[]
         {
             "members.read", "members.update",
@@ -143,7 +145,6 @@ public static class DatabaseSeeder
         var roleDefinitions = new (string Name, RoleScope Scope)[]
         {
             ("SuperAdmin", RoleScope.System),
-            ("AssociationAdmin", RoleScope.System),
             ("MemberAdmin", RoleScope.Organization),
             ("MemberStaff", RoleScope.Organization),
         };
