@@ -3,6 +3,8 @@ import { Building } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { memberEntitiesApi } from "@/lib/portal/api";
 import { OrganizationForm } from "@/components/portal/organization-form";
+import { InviteStaffForm } from "@/components/portal/invite-staff-form";
+import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 
 export const metadata: Metadata = { title: "Organization" };
@@ -43,6 +45,17 @@ export default async function PortalOrganizationPage() {
           Only your organization&apos;s Member Admin can edit these details.
         </p>
       )}
+
+      {canEdit ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Invite staff</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <InviteStaffForm memberEntityId={membership.memberEntityId} />
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

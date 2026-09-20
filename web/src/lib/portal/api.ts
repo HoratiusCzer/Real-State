@@ -61,3 +61,14 @@ export const profileApi = {
   update: (accessToken: string, input: { fullName: string; phone?: string }) =>
     apiPatch<void>("/api/profiles/me", input, accessToken),
 };
+
+export type RoleSummary = { id: string; name: string; scope: string };
+
+export const rolesApi = {
+  list: (accessToken: string) => apiGet<RoleSummary[]>("/api/reference/roles", accessToken),
+};
+
+export const invitationsApi = {
+  create: (accessToken: string, input: { email: string; memberEntityId: string; roleId: string }) =>
+    apiPost<{ id: string }>("/api/invitations", input, accessToken),
+};

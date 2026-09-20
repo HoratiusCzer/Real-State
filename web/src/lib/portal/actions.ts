@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getAccessToken } from "@/lib/auth/session";
-import { memberEntitiesApi, notificationsApi, profileApi } from "./api";
+import { invitationsApi, memberEntitiesApi, notificationsApi, profileApi, rolesApi } from "./api";
 import type { FormState } from "@/lib/auth/actions";
 
 async function requireAccessToken(): Promise<string> {
@@ -72,4 +72,29 @@ export async function updateOrganizationAction(id: string, _prev: FormState, for
   revalidatePath("/portal/organization");
   revalidatePath("/portal/dashboard");
   return { success: "Organization updated." };
+}
+
+export async function inviteStaffAction(memberEntityId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const email = String(formData.get("email") ?? "").trim();
+  if (!email) {
+    return { error: "Email is required." };
+  }
+
+  const accessToken = await requireAccessToken();
+  const rolesResult = await rolesApi.list(accessToken);
+  if (!rolesResult.ok) {
+    return { error: rolesResult.error };
+  }
+  const memberStaffRole = rolesResult.data.find((r) => r.name === "MemberStaff");
+  if (!memberStaffRole) {
+    return { error: "MemberStaff role is not configured." };
+  }
+
+  const result = await invitationsApi.create(accessToken, { email, memberEntityId, roleId: memberStaffRole.id });
+  if (!result.ok) {
+    return { error: result.error };
+  }
+
+  revalidatePath("/portal/organization");
+  return { success: `Invitation sent to ${email}.` };
 }

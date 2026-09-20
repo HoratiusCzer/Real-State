@@ -50,12 +50,35 @@ public class InvitationsController(IInvitationService invitationService, ReakDbC
         return Ok(invitations);
     }
 
-    /// <summary>Admin-only — creates and emails an invitation (spec §2.4 Flow A step 3).</summary>
+    /// <summary>Creates and emails an invitation (spec §2.4 Flow A step 3). members.create is held
+    /// by both SuperAdmin and MemberAdmin — same "permission slug alone isn't enough" gap already
+    /// guarded against in ProfilesController.List/InvitationsController.List/
+    /// MemberEntitiesController.Update, so a non-system-admin caller is scoped here in code: they
+    /// may only invite MemberStaff (never MemberAdmin or any System-scoped role) into an org they
+    /// themselves administer (same ownership check MemberEntitiesController.Update already uses).
+    /// A system admin is unrestricted, exactly as before.</summary>
     [HttpPost]
     [Authorize]
     [RequirePermission("members.create")]
     public async Task<IActionResult> Create(CreateInvitationRequest request, CancellationToken ct)
     {
+        if (!User.HasClaim(ClaimsNames.IsSystemAdmin, "true"))
+        {
+            var role = await db.Roles.FirstOrDefaultAsync(r => r.Id == request.RoleId, ct);
+            if (role is null || role.Name != "MemberStaff")
+            {
+                return Forbid();
+            }
+
+            var profileId = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
+            var administersThisEntity = await db.ProfileRoleAssignments
+                .AnyAsync(a => a.ProfileId == profileId && a.MemberEntityId == request.MemberEntityId && a.Role.Name == "MemberAdmin", ct);
+            if (!administersThisEntity)
+            {
+                return Forbid();
+            }
+        }
+
         try
         {
             var invitedBy = Guid.Parse(User.FindFirstValue(JwtRegisteredClaimNames.Sub)!);
