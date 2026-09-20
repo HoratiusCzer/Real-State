@@ -53,10 +53,10 @@ public class MemberEntitiesController(ReakDbContext db, IAuditLogService auditLo
         return entity is null ? NotFound() : Ok(entity);
     }
 
-    /// <summary>A MemberAdmin may update only the organization(s) they administer; a SuperAdmin
-    /// may update any. Holding the members.update permission slug alone is not enough — that
-    /// slug is shared with the Admin Portal's own member-management screens (Stage 11), which do
-    /// need to reach every org.</summary>
+    /// <summary>A MemberAdmin may update only the organization(s) they administer; a SuperAdmin/
+    /// AssociationAdmin may update any. Holding the members.update permission slug alone is not
+    /// enough — that slug is shared with the Admin Portal's own member-management screens
+    /// (Stage 11), which do need to reach every org.</summary>
     [HttpPut("{id:guid}")]
     [RequirePermission("members.update")]
     public async Task<IActionResult> Update(Guid id, UpdateMemberEntityRequest request, CancellationToken ct)
