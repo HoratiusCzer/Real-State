@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { Bookmark, BookmarkCheck, FileText, Trash2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { listingsApi } from "@/lib/listings/api";
+import { formatListingArea } from "@/lib/listings/land-area";
 import {
   approveListingAction,
   archiveListingAction,
@@ -94,7 +95,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           <Detail label="Price" value={`${listing.currencyCode} ${listing.price.toLocaleString()}${listing.isPriceNegotiable ? " (negotiable)" : ""}`} />
           <Detail label="Type" value={`${listing.propertyTypeName}${listing.propertySubtypeName ? ` / ${listing.propertySubtypeName}` : ""}`} />
           <Detail label="Purpose" value={listing.purposeName} />
-          <Detail label="Land area" value={`${listing.landArea} ${listing.areaUnitName}`} />
+          <Detail label="Land area" value={formatListingArea(listing)} />
           {listing.builtUpArea ? <Detail label="Built-up area" value={`${listing.builtUpArea} ${listing.areaUnitName}`} /> : null}
           <Detail
             label="Location"

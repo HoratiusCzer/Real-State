@@ -5,6 +5,7 @@ using REAK.Api.Models.Entities.Listings;
 using REAK.Api.Models.Entities.Matching;
 using REAK.Api.Models.Enums;
 using REAK.Api.Services.Notifications;
+using REAK.Api.Services.Reference;
 using REAK.Api.Services.Security;
 
 namespace REAK.Api.Services.Matching;
@@ -72,6 +73,7 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
             .Include(d => d.PropertyTypes)
             .Include(d => d.Locations)
             .Include(d => d.DemandAmenities)
+            .Include(d => d.AreaUnit)
             .Where(d => !d.IsDeleted && d.Status == DemandStatus.Active)
             .ToListAsync(ct);
 
@@ -89,6 +91,7 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
             .Include(d => d.PropertyTypes)
             .Include(d => d.Locations)
             .Include(d => d.DemandAmenities)
+            .Include(d => d.AreaUnit)
             .FirstOrDefaultAsync(d => d.Id == demandId && !d.IsDeleted && d.Status == DemandStatus.Active, ct);
         if (demand is null) return 0;
 
@@ -236,7 +239,17 @@ public class MatchingEngine(ReakDbContext db, SessionContextOverride sessionCont
         {
             MatchCriterion.Location => EvaluateLocation(listing, demand),
             MatchCriterion.Price => EvaluateRange(listing.Price, demand.MinBudget, demand.MaxBudget, rule.ToleranceValue, "budget"),
-            MatchCriterion.Area => EvaluateRange(listing.LandArea, demand.MinArea, demand.MaxArea, rule.ToleranceValue, "area"),
+            // AreaInSquareFeet (spec §11) is the canonical, unit-independent figure a listing
+            // always stores; demand.MinArea/MaxArea are still a single raw value + AreaUnit
+            // (the demand side of the compound-entry feature is a separate follow-up), so they're
+            // converted to square feet here on the fly rather than compared as raw decimals —
+            // comparing raw values silently mixed units (a listing entered in Ropani against a
+            // demand range entered in Aana produced meaningless results).
+            MatchCriterion.Area => EvaluateRange(
+                listing.AreaInSquareFeet,
+                demand.MinArea is { } minArea ? LandAreaConverter.ToSquareFeet(minArea, demand.AreaUnit?.Name) : null,
+                demand.MaxArea is { } maxArea ? LandAreaConverter.ToSquareFeet(maxArea, demand.AreaUnit?.Name) : null,
+                rule.ToleranceValue, "area"),
             MatchCriterion.PropertyType => EvaluatePropertyType(listing, demand),
             MatchCriterion.Purpose => EvaluatePurpose(listing, demand),
             MatchCriterion.Bedrooms => EvaluateMinimum(listing.Bedrooms, demand.MinBedrooms, "bedroom"),

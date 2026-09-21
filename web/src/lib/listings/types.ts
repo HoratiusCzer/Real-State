@@ -14,6 +14,8 @@ export type ListingSummary = {
   isPriceNegotiable: boolean;
   landArea: number;
   areaUnitName: string;
+  measurementSystem: string;
+  areaInSquareFeet: number;
   bedrooms: number | null;
   bathrooms: number | null;
   status: string;
@@ -63,6 +65,15 @@ export type ListingDetail = {
   builtUpArea: number | null;
   areaUnitId: string;
   areaUnitName: string;
+  measurementSystem: string;
+  ropaniValue: number | null;
+  aanaValue: number | null;
+  paisaValue: number | null;
+  damValue: number | null;
+  bighaValue: number | null;
+  katthaValue: number | null;
+  dhurValue: number | null;
+  areaInSquareFeet: number;
   hasRoadAccess: boolean;
   roadWidthFeet: number | null;
   roadType: string | null;
@@ -136,6 +147,14 @@ export type PublicPropertyDetail = {
   landArea: number;
   builtUpArea: number | null;
   areaUnitName: string;
+  measurementSystem: string;
+  ropaniValue: number | null;
+  aanaValue: number | null;
+  paisaValue: number | null;
+  damValue: number | null;
+  bighaValue: number | null;
+  katthaValue: number | null;
+  dhurValue: number | null;
   hasRoadAccess: boolean;
   roadWidthFeet: number | null;
   facing: string | null;
@@ -147,6 +166,20 @@ export type PublicPropertyDetail = {
   amenityNames: string[];
   mediaUrls: string[];
   createdAt: string;
+};
+
+// Mirrors REAK.Api's LandAreaInput (spec §11) — only the field set matching measurementSystem
+// is meaningful. No areaUnitId: the server derives it from measurementSystem.
+export type LandAreaRequestInput = {
+  measurementSystem: number;
+  ropaniValue?: number;
+  aanaValue?: number;
+  paisaValue?: number;
+  damValue?: number;
+  bighaValue?: number;
+  katthaValue?: number;
+  dhurValue?: number;
+  landArea?: number;
 };
 
 export type CreateListingInput = {
@@ -166,9 +199,8 @@ export type CreateListingInput = {
   currencyId: string;
   price: number;
   isPriceNegotiable: boolean;
-  landArea: number;
+  landArea: LandAreaRequestInput;
   builtUpArea?: number;
-  areaUnitId: string;
   hasRoadAccess: boolean;
   roadWidthFeet?: number;
   roadType?: string;

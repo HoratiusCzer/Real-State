@@ -83,6 +83,8 @@ public class PublicPropertiesController(ReakDbContext db) : ControllerBase
                 l.Locality != null ? l.Locality.Name : null, l.Landmark,
                 l.Price, l.Currency.Code, l.IsPriceNegotiable,
                 l.LandArea, l.BuiltUpArea, l.AreaUnit.Name,
+                l.MeasurementSystem.ToString(), l.RopaniValue, l.AanaValue, l.PaisaValue, l.DamValue,
+                l.BighaValue, l.KatthaValue, l.DhurValue,
                 l.HasRoadAccess, l.RoadWidthFeet, l.Facing != null ? l.Facing.ToString() : null,
                 l.Bedrooms, l.Bathrooms, l.Floors, l.ParkingSpaces, l.Furnishing != null ? l.Furnishing.ToString() : null,
                 l.ListingAmenities.Select(a => a.Amenity.Name).ToList(),

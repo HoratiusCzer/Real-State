@@ -37,3 +37,16 @@ public enum PropertyFacing
     SouthEast = 7,
     SouthWest = 8,
 }
+
+/// <summary>How a listing's LandArea was entered (spec §11) — Nepal's two traditional
+/// geography-based compound unit systems (Hill: Ropani-Aana-Paisa-Dam; Terai:
+/// Bigha-Kattha-Dhur), or a direct modern single-value entry. Stored explicitly rather than
+/// inferred from which compound columns are populated, so every reader (edit-form
+/// repopulation, display formatting) doesn't need to re-derive it.</summary>
+public enum LandAreaMeasurementSystem
+{
+    RopaniSystem = 1,
+    BighaSystem = 2,
+    SquareFeet = 3,
+    SquareMetres = 4,
+}

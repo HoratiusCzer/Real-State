@@ -42,8 +42,11 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         if (query.LocalityId is not null) q = q.Where(l => l.LocalityId == query.LocalityId);
         if (query.MinPrice is not null) q = q.Where(l => l.Price >= query.MinPrice);
         if (query.MaxPrice is not null) q = q.Where(l => l.Price <= query.MaxPrice);
-        if (query.MinArea is not null) q = q.Where(l => l.LandArea >= query.MinArea);
-        if (query.MaxArea is not null) q = q.Where(l => l.LandArea <= query.MaxArea);
+        // MinArea/MaxArea are interpreted as square feet (AreaInSquareFeet), not raw LandArea —
+        // comparing LandArea directly used to silently mix units (a listing entered in Ropani vs
+        // one entered in Aana produced meaningless results). No frontend UI calls this filter yet.
+        if (query.MinArea is not null) q = q.Where(l => l.AreaInSquareFeet >= query.MinArea);
+        if (query.MaxArea is not null) q = q.Where(l => l.AreaInSquareFeet <= query.MaxArea);
         if (query.MinRoadWidth is not null) q = q.Where(l => l.RoadWidthFeet != null && l.RoadWidthFeet >= query.MinRoadWidth);
         if (query.MinBedrooms is not null) q = q.Where(l => l.Bedrooms != null && l.Bedrooms >= query.MinBedrooms);
         if (query.MinBathrooms is not null) q = q.Where(l => l.Bathrooms != null && l.Bathrooms >= query.MinBathrooms);
@@ -81,7 +84,7 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
                 l.PropertyType.Name, l.PropertySubtype != null ? l.PropertySubtype.Name : null, l.Purpose.Name,
                 l.Province.Name, l.District.Name, l.Municipality.Name,
                 l.Price, l.Currency.Code, l.IsPriceNegotiable,
-                l.LandArea, l.AreaUnit.Name, l.Bedrooms, l.Bathrooms,
+                l.LandArea, l.AreaUnit.Name, l.MeasurementSystem.ToString(), l.AreaInSquareFeet, l.Bedrooms, l.Bathrooms,
                 l.Status.ToString(), l.NetworkVisibility.ToString(), l.IsPublicVisible,
                 l.Media.Where(m => m.IsPrimary).Select(m => m.Url).FirstOrDefault(),
                 l.CreatedAt))
@@ -112,10 +115,16 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             return (new ListingOp(ListingOpResult.Forbidden, "You must belong to a member organization to create a listing."), null);
         }
 
+        var (landAreaError, landArea) = await ResolveLandAreaAsync(request.LandArea, ct);
+        if (landAreaError is not null || landArea is null)
+        {
+            return (new ListingOp(ListingOpResult.InvalidState, landAreaError ?? "Invalid land area."), null);
+        }
+
         var referenceError = await ValidateReferencesAsync(
             request.PropertyTypeId, request.PropertySubtypeId, request.PurposeId, request.ProvinceId,
             request.DistrictId, request.MunicipalityId, request.WardId, request.LocalityId,
-            request.CurrencyId, request.AreaUnitId, request.AmenityIds, ct);
+            request.CurrencyId, landArea.AreaUnitId, request.AmenityIds, ct);
         if (referenceError is not null)
         {
             return (new ListingOp(ListingOpResult.InvalidState, referenceError), null);
@@ -152,9 +161,18 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             CurrencyId = request.CurrencyId,
             Price = request.Price,
             IsPriceNegotiable = request.IsPriceNegotiable,
-            LandArea = request.LandArea,
+            LandArea = landArea.LandArea,
             BuiltUpArea = request.BuiltUpArea,
-            AreaUnitId = request.AreaUnitId,
+            AreaUnitId = landArea.AreaUnitId,
+            MeasurementSystem = landArea.MeasurementSystem,
+            RopaniValue = landArea.RopaniValue,
+            AanaValue = landArea.AanaValue,
+            PaisaValue = landArea.PaisaValue,
+            DamValue = landArea.DamValue,
+            BighaValue = landArea.BighaValue,
+            KatthaValue = landArea.KatthaValue,
+            DhurValue = landArea.DhurValue,
+            AreaInSquareFeet = landArea.AreaInSquareFeet,
             HasRoadAccess = request.HasRoadAccess,
             RoadWidthFeet = request.RoadWidthFeet,
             RoadType = request.RoadType,
@@ -203,10 +221,16 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
             return new ListingOp(ListingOpResult.NotFound);
         }
 
+        var (landAreaError, landArea) = await ResolveLandAreaAsync(request.LandArea, ct);
+        if (landAreaError is not null || landArea is null)
+        {
+            return new ListingOp(ListingOpResult.InvalidState, landAreaError ?? "Invalid land area.");
+        }
+
         var referenceError = await ValidateReferencesAsync(
             request.PropertyTypeId, request.PropertySubtypeId, request.PurposeId, request.ProvinceId,
             request.DistrictId, request.MunicipalityId, request.WardId, request.LocalityId,
-            request.CurrencyId, request.AreaUnitId, amenityIds: null, ct);
+            request.CurrencyId, landArea.AreaUnitId, amenityIds: null, ct);
         if (referenceError is not null)
         {
             return new ListingOp(ListingOpResult.InvalidState, referenceError);
@@ -234,9 +258,18 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         listing.CurrencyId = request.CurrencyId;
         listing.Price = request.Price;
         listing.IsPriceNegotiable = request.IsPriceNegotiable;
-        listing.LandArea = request.LandArea;
+        listing.LandArea = landArea.LandArea;
         listing.BuiltUpArea = request.BuiltUpArea;
-        listing.AreaUnitId = request.AreaUnitId;
+        listing.AreaUnitId = landArea.AreaUnitId;
+        listing.MeasurementSystem = landArea.MeasurementSystem;
+        listing.RopaniValue = landArea.RopaniValue;
+        listing.AanaValue = landArea.AanaValue;
+        listing.PaisaValue = landArea.PaisaValue;
+        listing.DamValue = landArea.DamValue;
+        listing.BighaValue = landArea.BighaValue;
+        listing.KatthaValue = landArea.KatthaValue;
+        listing.DhurValue = landArea.DhurValue;
+        listing.AreaInSquareFeet = landArea.AreaInSquareFeet;
         listing.HasRoadAccess = request.HasRoadAccess;
         listing.RoadWidthFeet = request.RoadWidthFeet;
         listing.RoadType = request.RoadType;
@@ -462,6 +495,8 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
                 l.Landmark, l.Latitude, l.Longitude,
                 l.CurrencyId, l.Currency.Code, l.Price, l.IsPriceNegotiable,
                 l.LandArea, l.BuiltUpArea, l.AreaUnitId, l.AreaUnit.Name,
+                l.MeasurementSystem.ToString(), l.RopaniValue, l.AanaValue, l.PaisaValue, l.DamValue,
+                l.BighaValue, l.KatthaValue, l.DhurValue, l.AreaInSquareFeet,
                 l.HasRoadAccess, l.RoadWidthFeet, l.RoadType, l.Facing != null ? l.Facing.ToString() : null,
                 l.Bedrooms, l.Bathrooms, l.Floors, l.ParkingSpaces, l.Furnishing != null ? l.Furnishing.ToString() : null,
                 l.NetworkVisibility.ToString(), l.IsPublicVisible, l.Status.ToString(), l.RejectionReason,
@@ -493,6 +528,79 @@ public class ListingService(ReakDbContext db, IReferenceCodeGenerator referenceC
         expiresAt is { } exp && exp.Date < DateTime.UtcNow.Date
             ? "Expiry date can't be in the past."
             : null;
+
+    private static readonly Dictionary<LandAreaMeasurementSystem, string> AreaUnitNameBySystem = new()
+    {
+        [LandAreaMeasurementSystem.RopaniSystem] = "Ropani",
+        [LandAreaMeasurementSystem.BighaSystem] = "Bigha",
+        [LandAreaMeasurementSystem.SquareFeet] = "Square Feet",
+        [LandAreaMeasurementSystem.SquareMetres] = "Square Metres",
+    };
+
+    /// <summary>Validates and resolves a LandAreaInput into the values PropertyListing actually
+    /// stores: LandArea/AreaUnitId are derived here (from the compound values for
+    /// RopaniSystem/BighaSystem, from the direct entry for SquareFeet/SquareMetres) rather than
+    /// trusted from the client, same as AreaInSquareFeet — the server is the single source of
+    /// truth for this conversion math, not a value round-tripped through the browser. Rejects a
+    /// request that mixes fields from more than one system (e.g. Bigha values sent alongside
+    /// MeasurementSystem=RopaniSystem) rather than silently ignoring the mismatched ones, since
+    /// that almost always means stale client state from switching systems mid-form.</summary>
+    private async Task<(string? Error, ResolvedLandArea? Result)> ResolveLandAreaAsync(LandAreaInput input, CancellationToken ct)
+    {
+        var unitName = AreaUnitNameBySystem[input.MeasurementSystem];
+        var areaUnitId = await db.AreaUnits.Where(u => u.Name == unitName).Select(u => (Guid?)u.Id).FirstOrDefaultAsync(ct);
+        if (areaUnitId is null)
+        {
+            return ($"The \"{unitName}\" area unit is not configured.", null);
+        }
+
+        switch (input.MeasurementSystem)
+        {
+            case LandAreaMeasurementSystem.RopaniSystem:
+                if (input.BighaValue is not null || input.KatthaValue is not null || input.DhurValue is not null || input.LandArea is not null)
+                {
+                    return ("Ropani System entry can't also include Bigha System or direct area values.", null);
+                }
+                var (ropani, aana, paisa, dam) = (input.RopaniValue ?? 0, input.AanaValue ?? 0, input.PaisaValue ?? 0, input.DamValue ?? 0);
+                return (null, new ResolvedLandArea(
+                    LandAreaConverter.RopaniCompoundToRopaniDecimal(ropani, aana, paisa, dam), areaUnitId.Value,
+                    input.MeasurementSystem, ropani, aana, paisa, dam, null, null, null,
+                    LandAreaConverter.RopaniCompoundToSquareFeet(ropani, aana, paisa, dam)));
+
+            case LandAreaMeasurementSystem.BighaSystem:
+                if (input.RopaniValue is not null || input.AanaValue is not null || input.PaisaValue is not null || input.DamValue is not null || input.LandArea is not null)
+                {
+                    return ("Bigha System entry can't also include Ropani System or direct area values.", null);
+                }
+                var (bigha, kattha, dhur) = (input.BighaValue ?? 0, input.KatthaValue ?? 0, input.DhurValue ?? 0);
+                return (null, new ResolvedLandArea(
+                    LandAreaConverter.BighaCompoundToBighaDecimal(bigha, kattha, dhur), areaUnitId.Value,
+                    input.MeasurementSystem, null, null, null, null, bigha, kattha, dhur,
+                    LandAreaConverter.BighaCompoundToSquareFeet(bigha, kattha, dhur)));
+
+            case LandAreaMeasurementSystem.SquareFeet:
+            case LandAreaMeasurementSystem.SquareMetres:
+                if (input.RopaniValue is not null || input.AanaValue is not null || input.PaisaValue is not null || input.DamValue is not null
+                    || input.BighaValue is not null || input.KatthaValue is not null || input.DhurValue is not null)
+                {
+                    return ("Square Feet/Square Metres entry can't also include compound system values.", null);
+                }
+                if (input.LandArea is not { } landArea)
+                {
+                    return ("Land area is required.", null);
+                }
+                var sqft = LandAreaConverter.ToSquareFeet(landArea, unitName)!.Value;
+                return (null, new ResolvedLandArea(landArea, areaUnitId.Value, input.MeasurementSystem, null, null, null, null, null, null, null, sqft));
+
+            default:
+                return ("Unrecognized measurement system.", null);
+        }
+    }
+
+    private record ResolvedLandArea(
+        decimal LandArea, Guid AreaUnitId, LandAreaMeasurementSystem MeasurementSystem,
+        int? RopaniValue, int? AanaValue, int? PaisaValue, int? DamValue,
+        int? BighaValue, int? KatthaValue, int? DhurValue, decimal AreaInSquareFeet);
 
     private async Task<string?> ValidateReferencesAsync(
         Guid propertyTypeId, Guid? propertySubtypeId, Guid purposeId, Guid provinceId, Guid districtId,

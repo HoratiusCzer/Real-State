@@ -6,11 +6,13 @@ import { Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import {
-  usePropertyTypes, usePurposes, useAmenities, useAreaUnits, useCurrencies,
+  usePropertyTypes, usePurposes, useAmenities, useCurrencies,
   useProvinces, useDistricts, useMunicipalities, useWards, useLocalities,
 } from "@/components/listings/wizard/use-reference-data";
 import { updateAmenitiesAction, updateListingAction } from "@/lib/listings/actions";
 import type { ListingDetail } from "@/lib/listings/types";
+import { LandAreaFields } from "@/components/listings/land-area-fields";
+import { fromListingDetail, toLandAreaPayload } from "@/lib/listings/land-area";
 
 const selectClass =
   "flex h-11 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -34,9 +36,8 @@ export function PropertyEditForm({ listing, initialAmenityIds }: { listing: List
   const [wardId, setWardId] = useState(listing.wardId);
   const [localityId, setLocalityId] = useState(listing.localityId ?? "");
   const [landmark, setLandmark] = useState(listing.landmark ?? "");
-  const [landArea, setLandArea] = useState(String(listing.landArea));
+  const [landArea, setLandArea] = useState(() => fromListingDetail(listing));
   const [builtUpArea, setBuiltUpArea] = useState(listing.builtUpArea != null ? String(listing.builtUpArea) : "");
-  const [areaUnitId, setAreaUnitId] = useState(listing.areaUnitId);
   const [bedrooms, setBedrooms] = useState(listing.bedrooms != null ? String(listing.bedrooms) : "");
   const [bathrooms, setBathrooms] = useState(listing.bathrooms != null ? String(listing.bathrooms) : "");
   const [floors, setFloors] = useState(listing.floors != null ? String(listing.floors) : "");
@@ -54,7 +55,6 @@ export function PropertyEditForm({ listing, initialAmenityIds }: { listing: List
   const propertyTypes = usePropertyTypes();
   const purposes = usePurposes();
   const amenities = useAmenities();
-  const areaUnits = useAreaUnits();
   const currencies = useCurrencies();
   const provinces = useProvinces();
   const districts = useDistricts(provinceId);
@@ -73,7 +73,7 @@ export function PropertyEditForm({ listing, initialAmenityIds }: { listing: List
         propertyTypeId, propertySubtypeId: propertySubtypeId || undefined, purposeId,
         provinceId, districtId, municipalityId, wardId, localityId: localityId || undefined, landmark: landmark || undefined,
         currencyId, price: Number(price), isPriceNegotiable,
-        landArea: Number(landArea), builtUpArea: builtUpArea ? Number(builtUpArea) : undefined, areaUnitId,
+        landArea: toLandAreaPayload(landArea), builtUpArea: builtUpArea ? Number(builtUpArea) : undefined,
         hasRoadAccess, roadWidthFeet: roadWidthFeet ? Number(roadWidthFeet) : undefined, roadType: undefined,
         facing: undefined,
         bedrooms: bedrooms ? Number(bedrooms) : undefined,
@@ -171,9 +171,10 @@ export function PropertyEditForm({ listing, initialAmenityIds }: { listing: List
       </Section>
 
       <Section title="Specifications">
+        <div className="mb-4">
+          <LandAreaFields value={landArea} onChange={(patch) => setLandArea((s) => ({ ...s, ...patch }))} />
+        </div>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div><Label>Land area</Label><input className={inputClass} type="number" value={landArea} onChange={(e) => setLandArea(e.target.value)} /></div>
-          <div><Label>Area unit</Label><select className={selectClass} value={areaUnitId} onChange={(e) => setAreaUnitId(e.target.value)}>{areaUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
           <div><Label>Built-up area</Label><input className={inputClass} type="number" value={builtUpArea} onChange={(e) => setBuiltUpArea(e.target.value)} /></div>
           <div><Label>Bedrooms</Label><input className={inputClass} type="number" value={bedrooms} onChange={(e) => setBedrooms(e.target.value)} /></div>
           <div><Label>Bathrooms</Label><input className={inputClass} type="number" value={bathrooms} onChange={(e) => setBathrooms(e.target.value)} /></div>

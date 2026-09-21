@@ -92,7 +92,9 @@ public class PropertyListing
 
     public bool IsPriceNegotiable { get; set; }
 
-    // Area
+    // Area (spec §11). LandArea/AreaUnitId stay populated for backward compatibility — for a
+    // RopaniSystem/BighaSystem entry they're derived server-side from the compound values below
+    // (never trusted from the client), for SquareFeet/SquareMetres they're the direct entry.
     [Required]
     [Column(TypeName = "decimal(18,4)")]
     public decimal LandArea { get; set; }
@@ -103,6 +105,29 @@ public class PropertyListing
     [Required]
     [ForeignKey(nameof(AreaUnit))]
     public Guid AreaUnitId { get; set; }
+
+    [Required]
+    public LandAreaMeasurementSystem MeasurementSystem { get; set; } = LandAreaMeasurementSystem.SquareFeet;
+
+    // Only the set matching MeasurementSystem is populated — the exact original compound entry,
+    // preserved so re-opening a listing to edit shows it exactly, not a lossy decimal
+    // reconstruction (e.g. LandArea alone can't distinguish "4 Ropani 0 Aana 2 Paisa" from any
+    // other combination that happens to total the same decimal).
+    public int? RopaniValue { get; set; }
+    public int? AanaValue { get; set; }
+    public int? PaisaValue { get; set; }
+    public int? DamValue { get; set; }
+
+    public int? BighaValue { get; set; }
+    public int? KatthaValue { get; set; }
+    public int? DhurValue { get; set; }
+
+    /// <summary>Canonical, unit-independent area — always computed server-side (never trusted
+    /// from the client), used for cross-listing filtering/sorting/comparison (ListingSearchQuery,
+    /// MatchingEngine's Area rule) regardless of which system the agent entered in.</summary>
+    [Required]
+    [Column(TypeName = "decimal(18,4)")]
+    public decimal AreaInSquareFeet { get; set; }
 
     // Specifications
     public bool HasRoadAccess { get; set; }

@@ -1,9 +1,31 @@
 using System.ComponentModel.DataAnnotations;
 using REAK.Api.Models.Enums;
+using REAK.Api.Services.Reference;
 
 namespace REAK.Api.Models.Dto;
 
 public record ListingContactInput([MaxLength(255)] string? ContactName, [MaxLength(50)] string? Phone, [MaxLength(255)] string? Email);
+
+// spec §11: Nepal's two compound geography-based systems (Ropani-Aana-Paisa-Dam,
+// Bigha-Kattha-Dhur) need split integer fields, not one decimal — "4 Aana 10 Paisa" isn't
+// representable as "4.1 Aana". Only the field set matching MeasurementSystem is meaningful. No
+// AreaUnitId here — the server derives it purely from MeasurementSystem (see
+// ListingService.ResolveLandAreaAsync), never trusting a client-sent unit. Per-field max values
+// ([Range]'s second argument must be a compile-time constant, which a `const int` on
+// LandAreaConverter satisfies) reject an out-of-range sub-unit rather than silently rolling it
+// over into the next unit — an agent transcribing a real deed number who types 20 in Aana almost
+// certainly made a typo; silent rollover would quietly change the exact value without them
+// noticing.
+public record LandAreaInput(
+    [Required, EnumDataType(typeof(LandAreaMeasurementSystem))] LandAreaMeasurementSystem MeasurementSystem,
+    [Range(0, int.MaxValue)] int? RopaniValue,
+    [Range(0, LandAreaConverter.AanaMax)] int? AanaValue,
+    [Range(0, LandAreaConverter.PaisaMax)] int? PaisaValue,
+    [Range(0, LandAreaConverter.DamMax)] int? DamValue,
+    [Range(0, int.MaxValue)] int? BighaValue,
+    [Range(0, LandAreaConverter.KatthaMax)] int? KatthaValue,
+    [Range(0, LandAreaConverter.DhurMax)] int? DhurValue,
+    [Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal? LandArea);
 
 // Range/EnumDataType bounds below mirror PropertyListings' own CHECK constraints exactly
 // (Data/Migrations/*AddDatabaseQualityCheckConstraints*) — this is the DTO-level half of
@@ -28,9 +50,8 @@ public record CreateListingRequest(
     [Required] Guid CurrencyId,
     [Required, Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal Price,
     bool IsPriceNegotiable,
-    [Required, Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal LandArea,
+    [Required] LandAreaInput LandArea,
     [Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal? BuiltUpArea,
-    [Required] Guid AreaUnitId,
     bool HasRoadAccess,
     decimal? RoadWidthFeet,
     [MaxLength(100)] string? RoadType,
@@ -64,9 +85,8 @@ public record UpdateListingRequest(
     [Required] Guid CurrencyId,
     [Required, Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal Price,
     bool IsPriceNegotiable,
-    [Required, Range(typeof(decimal), "0.01", "79228162514264337593543950335")] decimal LandArea,
+    [Required] LandAreaInput LandArea,
     [Range(typeof(decimal), "0", "79228162514264337593543950335")] decimal? BuiltUpArea,
-    [Required] Guid AreaUnitId,
     bool HasRoadAccess,
     decimal? RoadWidthFeet,
     [MaxLength(100)] string? RoadType,
@@ -133,6 +153,8 @@ public record ListingSummaryDto(
     bool IsPriceNegotiable,
     decimal LandArea,
     string AreaUnitName,
+    string MeasurementSystem,
+    decimal AreaInSquareFeet,
     int? Bedrooms,
     int? Bathrooms,
     string Status,
@@ -178,6 +200,15 @@ public record ListingDetailDto(
     decimal? BuiltUpArea,
     Guid AreaUnitId,
     string AreaUnitName,
+    string MeasurementSystem,
+    int? RopaniValue,
+    int? AanaValue,
+    int? PaisaValue,
+    int? DamValue,
+    int? BighaValue,
+    int? KatthaValue,
+    int? DhurValue,
+    decimal AreaInSquareFeet,
     bool HasRoadAccess,
     decimal? RoadWidthFeet,
     string? RoadType,

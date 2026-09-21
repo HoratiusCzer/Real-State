@@ -4,6 +4,7 @@ import Image from "next/image";
 import { notFound } from "next/navigation";
 import { Home } from "lucide-react";
 import { publicPropertiesApi } from "@/lib/listings/api";
+import { formatListingArea } from "@/lib/listings/land-area";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { PagePlaceholder } from "@/components/marketing/page-placeholder";
@@ -66,7 +67,7 @@ export default async function PropertyDetailPage({ params }: { params: Promise<{
           <Detail label="Price" value={`${p.currencyCode} ${p.price.toLocaleString()}${p.isPriceNegotiable ? " (negotiable)" : ""}`} />
           <Detail label="Type" value={`${p.propertyTypeName}${p.propertySubtypeName ? ` / ${p.propertySubtypeName}` : ""}`} />
           <Detail label="Purpose" value={p.purposeName} />
-          <Detail label="Land area" value={`${p.landArea} ${p.areaUnitName}`} />
+          <Detail label="Land area" value={formatListingArea(p)} />
           <Detail
             label="Location"
             value={[p.localityName, `Ward ${p.wardNumber}`, p.municipalityName, p.districtName, p.provinceName].filter(Boolean).join(", ")}

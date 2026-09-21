@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Alert } from "@/components/ui/alert";
 import {
-  usePropertyTypes, usePurposes, useAmenities, useAreaUnits, useCurrencies,
+  usePropertyTypes, usePurposes, useAmenities, useCurrencies,
   useProvinces, useDistricts, useMunicipalities, useWards, useLocalities,
 } from "./use-reference-data";
 import { uploadWithProgress } from "./upload-with-progress";
@@ -16,6 +16,8 @@ import {
   updateContactAction, updateListingAction, updateVisibilityAction,
 } from "@/lib/listings/actions";
 import type { ListingMedia, ListingDocument } from "@/lib/listings/types";
+import { LandAreaFields } from "@/components/listings/land-area-fields";
+import { initialLandAreaState, toLandAreaPayload, formatLandArea, type LandAreaState } from "@/lib/listings/land-area";
 
 const selectClass =
   "flex h-11 w-full rounded-md border border-border bg-card px-3 text-sm text-foreground transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring";
@@ -32,7 +34,7 @@ type State = {
   propertyTypeId: string; propertySubtypeId: string;
   title: string; purposeId: string;
   provinceId: string; districtId: string; municipalityId: string; wardId: string; localityId: string; landmark: string;
-  landArea: string; builtUpArea: string; areaUnitId: string;
+  landArea: LandAreaState; builtUpArea: string;
   hasRoadAccess: boolean; roadWidthFeet: string; roadType: string; facing: string;
   bedrooms: string; bathrooms: string; floors: string; parkingSpaces: string; furnishing: string;
   currencyId: string; price: string; isPriceNegotiable: boolean;
@@ -47,7 +49,7 @@ const initialState: State = {
   propertyTypeId: "", propertySubtypeId: "",
   title: "", purposeId: "",
   provinceId: "", districtId: "", municipalityId: "", wardId: "", localityId: "", landmark: "",
-  landArea: "", builtUpArea: "", areaUnitId: "",
+  landArea: initialLandAreaState, builtUpArea: "",
   hasRoadAccess: false, roadWidthFeet: "", roadType: "", facing: "",
   bedrooms: "", bathrooms: "", floors: "", parkingSpaces: "", furnishing: "",
   currencyId: "", price: "", isPriceNegotiable: false,
@@ -74,9 +76,8 @@ function toUpdatePayload(s: State) {
     currencyId: s.currencyId,
     price: Number(s.price),
     isPriceNegotiable: s.isPriceNegotiable,
-    landArea: Number(s.landArea),
+    landArea: toLandAreaPayload(s.landArea),
     builtUpArea: s.builtUpArea ? Number(s.builtUpArea) : undefined,
-    areaUnitId: s.areaUnitId,
     hasRoadAccess: s.hasRoadAccess,
     roadWidthFeet: s.roadWidthFeet ? Number(s.roadWidthFeet) : undefined,
     roadType: s.roadType || undefined,
@@ -105,7 +106,6 @@ export function PropertyWizard() {
   const propertyTypes = usePropertyTypes();
   const purposes = usePurposes();
   const amenities = useAmenities();
-  const areaUnits = useAreaUnits();
   const currencies = useCurrencies();
   const provinces = useProvinces();
   const districts = useDistricts(state.provinceId);
@@ -133,7 +133,12 @@ export function PropertyWizard() {
       case 0: return !!state.propertyTypeId;
       case 1: return !!state.title && !!state.purposeId;
       case 2: return !!state.provinceId && !!state.districtId && !!state.municipalityId && !!state.wardId;
-      case 3: return !!state.landArea && !!state.areaUnitId;
+      case 3: {
+        const a = state.landArea;
+        if (a.measurementSystem === "1") return !!a.ropaniValue || !!a.aanaValue || !!a.paisaValue || !!a.damValue;
+        if (a.measurementSystem === "2") return !!a.bighaValue || !!a.katthaValue || !!a.dhurValue;
+        return !!a.landAreaDirect;
+      }
       case 4: return !!state.currencyId && !!state.price;
       default: return true;
     }
@@ -324,15 +329,12 @@ export function PropertyWizard() {
 
         {step === 3 && (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <Field label="Land area">
-              <input className={inputClass} type="number" min={0} step="0.01" value={state.landArea} onChange={(e) => set("landArea", e.target.value)} />
-            </Field>
-            <Field label="Area unit">
-              <select className={selectClass} value={state.areaUnitId} onChange={(e) => set("areaUnitId", e.target.value)}>
-                <option value="">Select…</option>
-                {areaUnits.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
-              </select>
-            </Field>
+            <div className="sm:col-span-2">
+              <LandAreaFields
+                value={state.landArea}
+                onChange={(patch) => setState((s) => ({ ...s, landArea: { ...s.landArea, ...patch } }))}
+              />
+            </div>
             <Field label="Built-up area (optional)">
               <input className={inputClass} type="number" min={0} step="0.01" value={state.builtUpArea} onChange={(e) => set("builtUpArea", e.target.value)} />
             </Field>
@@ -489,7 +491,7 @@ export function PropertyWizard() {
           <div className="space-y-3 text-sm">
             <p><span className="text-muted-foreground">Title:</span> {state.title}</p>
             <p><span className="text-muted-foreground">Price:</span> {state.price}</p>
-            <p><span className="text-muted-foreground">Land area:</span> {state.landArea}</p>
+            <p><span className="text-muted-foreground">Land area:</span> {formatLandArea(state.landArea)}</p>
             <p><span className="text-muted-foreground">Photos:</span> {media.length}</p>
             <p><span className="text-muted-foreground">Documents:</span> {documents.length}</p>
             <div className="flex gap-3 pt-4">

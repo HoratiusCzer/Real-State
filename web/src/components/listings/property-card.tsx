@@ -4,6 +4,7 @@ import { Home } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { statusBadgeVariant, statusLabel } from "@/lib/listings/status-badge";
+import { formatListingArea } from "@/lib/listings/land-area";
 
 export function PropertyCard({
   href,
@@ -17,6 +18,7 @@ export function PropertyCard({
   currencyCode,
   landArea,
   areaUnitName,
+  measurementSystem,
   bedrooms,
   bathrooms,
   imageUrl,
@@ -33,11 +35,15 @@ export function PropertyCard({
   currencyCode: string;
   landArea: number;
   areaUnitName: string;
+  measurementSystem?: string;
   bedrooms?: number | null;
   bathrooms?: number | null;
   imageUrl?: string | null;
   status?: string;
 }) {
+  const areaLabel = measurementSystem
+    ? formatListingArea({ measurementSystem, landArea, areaUnitName })
+    : `${landArea} ${areaUnitName}`;
   return (
     <Link href={href}>
       <Card className="overflow-hidden transition-colors hover:border-accent">
@@ -59,7 +65,7 @@ export function PropertyCard({
           </p>
           <p className="mt-1 text-sm text-muted-foreground">{locationLine}</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            {propertyTypeName} · {purposeName} · {landArea} {areaUnitName}
+            {propertyTypeName} · {purposeName} · {areaLabel}
             {bedrooms != null ? ` · ${bedrooms} bed` : ""}
             {bathrooms != null ? ` · ${bathrooms} bath` : ""}
           </p>
